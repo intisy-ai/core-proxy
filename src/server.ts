@@ -62,7 +62,7 @@ function modelsResponse(url: URL, configDir: string, profile: RoutingProfile): R
 
 // Classify a requested model into a mapping slot by tier keyword. Slots come from the
 // resolved map (detected Claude families incl. new ones) — nothing hardcoded here.
-function claudeSlot(model: string, map: Record<string, Chain>): string {
+function slotForModel(model: string, map: Record<string, Chain>): string {
   const m = (model || "").toLowerCase();
   for (const slot of Object.keys(map)) {
     if (slot !== "default" && m.indexOf(slot) >= 0) return slot;
@@ -106,14 +106,14 @@ export function createProxyServer(opts: ProxyOptions): ProxyServer {
     for (const slot of Object.keys(map)) {
       if ((map[slot] || []).some((e) => e.model === requested)) return map[slot];
     }
-    const slot = claudeSlot(requested, map);
+    const slot = slotForModel(requested, map);
     if (slot === "default" && requested) {
       // A model picked DIRECTLY (e.g. via /model) that isn't in any tier chain must
       // be served as itself when a provider offers it — falling through to the
       // default tier would silently substitute a different model.
       const entry = catalogEntries(configDir).find((e) => e.model === requested && !/-auto$/.test(e.model));
       if (entry) return [{ provider: entry.provider, model: entry.model, name: entry.name, derived: false }];
-      if (!/^claude-/.test(requested)) {
+      if (!opts.profile.nativeModelPattern?.test(requested)) {
         notify("Requested model '" + requested + "' is not in any provider catalog — serving the Default tier instead.");
       }
     }

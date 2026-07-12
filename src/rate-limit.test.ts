@@ -2,12 +2,19 @@ import { expect, it } from "vitest";
 import { isRateLimited, rateLimitResetMs, rateLimitFinal } from "./rate-limit.js";
 import type { RoutingProfile } from "./types.js";
 
+// Mirrors the real profile's ownership of synthesized headers: it copies the
+// upstream 429's own headers into its output itself (the engine no longer does
+// this overlay), plus its own x-test marker.
 const prof = {
-  nativeRateLimit: async ({ resetMs }: { resetMs: number }) => ({
-    status: 429,
-    headers: { "x-test": "1" },
-    body: JSON.stringify({ resetMs }),
-  }),
+  nativeRateLimit: async ({ resetMs, upstream }: { resetMs: number; upstream: Response | null }) => {
+    const headers: Record<string, string> = { "x-test": "1" };
+    if (upstream && upstream.status === 429) {
+      for (const [k, v] of upstream.headers) {
+        if (/^anthropic-ratelimit-/i.test(k)) headers[k] = v;
+      }
+    }
+    return { status: 429, headers, body: JSON.stringify({ resetMs }) };
+  },
 } as unknown as RoutingProfile;
 
 it("isRateLimited: 429 or x-hub-rate-limited header", () => {
@@ -59,13 +66,18 @@ it("rateLimitFinal: preserves upstream anthropic-ratelimit-* headers only when t
   expect(r2.headers.get("anthropic-ratelimit-unified-status")).toBeNull();
 });
 
-it("rateLimitFinal: retry-after is owned by profile.nativeRateLimit, not copied from a raw upstream 429 (locking test)", async () => {
+it("rateLimitFinal: returns exactly what the profile synthesizes — the profile's own retry-after wins and it owns copying upstream headers (locking test)", async () => {
+  // Stub mirrors the real profile: it copies every upstream header itself, then
+  // sets its own retry-after last so it always wins over a raw upstream value.
   const profWithOwnRetryAfter = {
-    nativeRateLimit: async ({ resetMs }: { resetMs: number }) => ({
-      status: 429,
-      headers: { "retry-after": "60" },
-      body: JSON.stringify({ resetMs }),
-    }),
+    nativeRateLimit: async ({ resetMs, upstream }: { resetMs: number; upstream: Response | null }) => {
+      const headers: Record<string, string> = {};
+      if (upstream) {
+        for (const [k, v] of upstream.headers) headers[k] = v;
+      }
+      headers["retry-after"] = "60";
+      return { status: 429, headers, body: JSON.stringify({ resetMs }) };
+    },
   } as unknown as RoutingProfile;
 
   const upstream429 = new Response("", {
@@ -80,6 +92,6 @@ it("rateLimitFinal: retry-after is owned by profile.nativeRateLimit, not copied 
 
   // The profile's own retry-after wins — the raw upstream "5" must never clobber it.
   expect(r.headers.get("retry-after")).toBe("60");
-  // The anthropic-ratelimit-* family is still preserved from the upstream 429.
+  // The anthropic-ratelimit-* family, copied by the profile's own stub, is present.
   expect(r.headers.get("anthropic-ratelimit-unified-reset")).toBe("999");
 });

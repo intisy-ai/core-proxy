@@ -51,6 +51,10 @@ export type RoutingProfile = {
   defaultContext: number;
   defaultOutput: number;
   nativeRateLimit: (info: RateLimitInfo) => Promise<{ status: number; headers: Record<string, string>; body: string }>;
+  // app-specific test for a model native to this app; when the requested model
+  // matches, the "not in catalog" notification is suppressed. Optional — when
+  // absent, unknown models always notify.
+  nativeModelPattern?: RegExp;
 };
 
 export type ProxyOptions = {
