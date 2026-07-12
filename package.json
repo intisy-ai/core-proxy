@@ -1,0 +1,14 @@
+{
+  "name": "core-proxy",
+  "version": "0.1.0",
+  "description": "Shared inbound proxy daemon + tier routing for the intisy loaders and dashboard",
+  "type": "module",
+  "main": "dist/index.js",
+  "license": "MIT",
+  "author": "intisy",
+  "repository": { "type": "git", "url": "git+https://github.com/intisy-ai/core-proxy.git" },
+  "files": ["dist/", "README.md", "LICENSE"],
+  "engines": { "node": ">=20.0.0" },
+  "scripts": { "build": "tsc", "test": "vitest run", "prepublishOnly": "npm run build" },
+  "devDependencies": { "typescript": "^5.6.0", "vitest": "^2.1.0", "@types/node": "^22.0.0" }
+}
