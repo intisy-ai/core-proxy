@@ -17,12 +17,15 @@ export function rateLimitResetMs(resp: Response, now: number = Date.now()): numb
 // Final response when every model in a chain is rate-limited. Delegates the actual
 // native-shaped 429 (status/headers/body) to profile.nativeRateLimit — each routing
 // profile knows its own upstream's rate-limit header conventions and error format.
-// On top of that, when the LAST attempt was itself a real upstream 429, re-apply its
-// anthropic-ratelimit-*/retry-after headers so precise upstream reset info survives
-// the synthesis (behavior parity with claude-code-loader/src/proxy.ts:114-142, which
-// keeps every upstream 429 header except its own internal x-hub-*/content-* framing
-// ones — the only such headers actually produced across this codebase are the
-// anthropic-ratelimit-* family and retry-after).
+// `retry-after` is owned entirely by profile.nativeRateLimit (it recomputes the value
+// from resetMs, matching claude-code-loader/src/proxy.ts's unconditional recompute —
+// the source never copies a raw upstream retry-after through). On top of that, when
+// the LAST attempt was itself a real upstream 429, re-apply its anthropic-ratelimit-*
+// headers so precise upstream rate-limit state survives the synthesis (parity with
+// claude-code-loader/src/proxy.ts:114-142, which keeps every upstream 429 header
+// except its own internal x-hub-*/content-* framing ones — the only such header
+// actually produced across this codebase besides retry-after is the
+// anthropic-ratelimit-* family).
 export async function rateLimitFinal(
   lastResp: Response | null,
   resetMs: number,
@@ -32,7 +35,7 @@ export async function rateLimitFinal(
   const headers = new Headers(built.headers);
   if (lastResp && lastResp.status === 429) {
     for (const [k, v] of lastResp.headers) {
-      if (/^anthropic-ratelimit-|^retry-after$/i.test(k)) headers.set(k, v);
+      if (/^anthropic-ratelimit-/i.test(k)) headers.set(k, v);
     }
   }
   return new Response(built.body, { status: built.status, headers });
