@@ -11,7 +11,7 @@ import { createServer, type Server } from "node:http";
 import { Readable } from "node:stream";
 import { resolveModelMap, catalogEntries } from "./model-map.js";
 import { isRateLimited, rateLimitResetMs, rateLimitFinal } from "./rate-limit.js";
-import type { Assignment, CatalogEntry, Chain, ProxyOptions, ProxyServer } from "./types.js";
+import type { Assignment, CatalogEntry, Chain, ProxyOptions, ProxyServer, RoutingProfile } from "./types.js";
 
 function errorResponse(status: number, message: string): Response {
   return new Response(JSON.stringify({ type: "error", error: { type: "loader_proxy_error", message } }), {
@@ -24,18 +24,18 @@ function errorResponse(status: number, message: string): Response {
 // against /v1/models. Provider-mapped ids don't exist at Anthropic, so forwarding
 // upstream 404s would show the /model picker stuck loading. Serve the loader's own
 // catalog instead — every mapped id resolves.
-function modelInfo(entry: CatalogEntry): Record<string, unknown> {
+function modelInfo(entry: CatalogEntry, profile: RoutingProfile): Record<string, unknown> {
   return {
     type: "model",
     id: entry.model,
     display_name: entry.name || entry.model,
     created_at: "2025-01-01T00:00:00Z",
-    max_input_tokens: entry.limit?.context ?? 200000,
-    max_tokens: entry.limit?.output ?? 64000,
+    max_input_tokens: entry.limit?.context ?? profile.defaultContext,
+    max_tokens: entry.limit?.output ?? profile.defaultOutput,
   };
 }
 
-function modelsResponse(url: URL, configDir: string): Response {
+function modelsResponse(url: URL, configDir: string, profile: RoutingProfile): Response {
   const json = (body: unknown, status?: number) =>
     new Response(JSON.stringify(body), { status: status || 200, headers: { "content-type": "application/json" } });
   const entries = catalogEntries(configDir).filter((e) => !/-auto$/.test(e.model));
@@ -43,14 +43,14 @@ function modelsResponse(url: URL, configDir: string): Response {
   if (id) {
     const entry = entries.find((e) => e.model === id);
     if (!entry) return json({ type: "error", error: { type: "not_found_error", message: "model not found: " + id } }, 404);
-    return json(modelInfo(entry));
+    return json(modelInfo(entry, profile));
   }
   const seen = new Set<string>();
   const data: Record<string, unknown>[] = [];
   for (const entry of entries) {
     if (seen.has(entry.model)) continue; // same id may exist under several providers
     seen.add(entry.model);
-    data.push(modelInfo(entry));
+    data.push(modelInfo(entry, profile));
   }
   return json({
     data,
@@ -123,7 +123,7 @@ export function createProxyServer(opts: ProxyOptions): ProxyServer {
   async function route(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/health") return new Response("ok", { status: 200 });
-    if (url.pathname === "/v1/models" || url.pathname.startsWith("/v1/models/")) return modelsResponse(url, configDir);
+    if (url.pathname === "/v1/models" || url.pathname.startsWith("/v1/models/")) return modelsResponse(url, configDir, opts.profile);
 
     const chain = await resolveAssignment(request);
     if (!chain.length) {

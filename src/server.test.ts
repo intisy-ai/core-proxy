@@ -36,3 +36,29 @@ it("synthesizes a native 429 when all providers are rate-limited", async () => {
   expect(r.status).toBe(429);
   expect(await r.json()).toMatchObject({ error: { type: "rate_limit_error" } });
 });
+
+it("/v1/models falls back to the profile's default context/output when a catalog entry has no limit", async () => {
+  // catalogEntries reads <configDir>/repos/<repo>/package.json for declared authProviders,
+  // then prefers the cached models from config/models.json for that provider's model list.
+  const repoDir = join(dir, "repos", "testprov-plugin");
+  mkdirSync(repoDir, { recursive: true });
+  writeFileSync(
+    join(repoDir, "package.json"),
+    JSON.stringify({ authProviders: [{ name: "testprov", models: [{ id: "test-model", name: "Test Model" }] }] })
+  );
+  writeFileSync(
+    join(dir, "config", "models.json"),
+    JSON.stringify({ testprov: { models: { "test-model": { name: "Test Model" } } } }) // deliberately no `limit`
+  );
+  const nonClaudeProfile = { ...profile, defaultContext: 128000, defaultOutput: 32000 };
+  await srv.close();
+  srv = createProxyServer({ configDir: dir, profile: nonClaudeProfile, port: 0, resolveHandler: async () => null });
+  port = await srv.listen();
+
+  const r = await fetch(`http://127.0.0.1:${port}/v1/models`);
+  const body = await r.json();
+  const entry = body.data.find((m: any) => m.id === "test-model");
+  expect(entry).toBeTruthy();
+  expect(entry.max_input_tokens).toBe(128000);
+  expect(entry.max_tokens).toBe(32000);
+});
