@@ -20,5 +20,3 @@ export { claudeTiers, readModelMap, catalogEntries, normalizeChain, resolveModel
 export { makeDynamicResolver } from "./handler-resolver.js";
 
 export { createProxyServer } from "./server.js";
-
-export { anthropicProfile } from "./profiles/anthropic.js";

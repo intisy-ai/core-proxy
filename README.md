@@ -24,11 +24,13 @@ flowchart LR
   W -->|chain exhausted| N[rateLimitFinal → profile.nativeRateLimit]
 ```
 
-Routing is parameterized by a `RoutingProfile`: everything Claude-specific
+Routing is parameterized by a `RoutingProfile`: everything app-specific
 (config filename, routing key, tier order/fallback, tier regex, env prefix,
 default context/output limits, and the native rate-limit response) lives in a
-profile, so a non-Anthropic host (e.g. OpenCode) can supply its own without
-forking the engine.
+profile supplied by the caller. This engine is **generic** — it contains no
+per-app logic. Each app's concrete profile lives in its own project (e.g.
+`claude-code-proxy` provides the Anthropic/Claude profile); a new proxy-using
+app adds its own `<app>-proxy` on top of this engine rather than forking it.
 
 ## Structure
 
@@ -41,19 +43,20 @@ forking the engine.
 - `src/handler-resolver.ts` — `makeDynamicResolver` (mtime-cache-busting
   dynamic import of provider handlers, provider list injected).
 - `src/server.ts` — `createProxyServer(opts)` (the daemon + node↔web adapter).
-- `src/profiles/anthropic.ts` — `anthropicProfile(overrides?)`.
-- `src/index.ts` — the public barrel.
+- `src/index.ts` — the public barrel. (App profiles live in their own
+  project, not here — see `claude-code-proxy`.)
 - `dist/` — compiled output (gitignored, never committed).
 
 ## Usage
 
 ```ts
-import { createProxyServer, anthropicProfile, makeDynamicResolver } from "../core-proxy/src/index.js";
+import { createProxyServer, makeDynamicResolver, type RoutingProfile } from "../core-proxy/src/index.js";
 
+// `profile` is supplied by an app-specific project (e.g. claude-code-proxy's anthropicProfile()).
 const resolveHandler = makeDynamicResolver(() =>
-  readDeployedProviders(reposDir).map((p) => ({ provider: p.provider, handlerPath: p.handlerPath }))
+  listProviders().map((p) => ({ provider: p.provider, handlerPath: p.handlerPath }))
 );
-const server = createProxyServer({ configDir, profile: anthropicProfile(), port: 34567, resolveHandler });
+const server = createProxyServer({ configDir, profile, port: 34567, resolveHandler });
 await server.listen();
 ```
 
