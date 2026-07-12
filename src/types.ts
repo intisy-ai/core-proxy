@@ -36,6 +36,12 @@ export type RateLimitInfo = {
 
 export type RoutingProfile = {
   configFile: string;
+  /**
+   * Loader-facing config field name for the routing-enable toggle (read by the
+   * loader's route-mode.ts / tui-extension.ts, not by this engine). Intentionally
+   * NOT consumed by core-proxy's model-map engine — do not wire it into
+   * readModelMap, which reads the separate `modelMap` field instead.
+   */
   routingKey: string;
   tierSourceProvider: string;
   tierOrder: string[];
@@ -72,6 +78,8 @@ export function isValidProfile(p: any): p is RoutingProfile {
     Array.isArray(p.tierFallback) &&
     p.tierRegex instanceof RegExp &&
     typeof p.envPrefix === "string" &&
+    typeof p.defaultContext === "number" &&
+    typeof p.defaultOutput === "number" &&
     typeof p.nativeRateLimit === "function"
   );
 }

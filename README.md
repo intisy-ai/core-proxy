@@ -33,8 +33,8 @@ forking the engine.
 ## Structure
 
 - `src/types.ts` — the ABI (`HandlerCtx`, `ProxyHandler`, `HandlerResolver`,
-  `Assignment`, `Chain`, `ModelMap`, `RoutingProfile`, `ProxyOptions`,
-  `ProxyServer`) + `isValidProfile`.
+  `Assignment`, `Chain`, `ModelMap`, `CatalogEntry`, `RateLimitInfo`,
+  `RoutingProfile`, `ProxyOptions`, `ProxyServer`) + `isValidProfile`.
 - `src/rate-limit.ts` — `isRateLimited`, `rateLimitResetMs`, `rateLimitFinal`.
 - `src/model-map.ts` — `resolveModelMap`, `claudeTiers`, `readModelMap`,
   `catalogEntries`, `normalizeChain`, `modelEnvPairs`.
