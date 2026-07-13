@@ -21,12 +21,10 @@ type ModelCacheMap = Record<string, ModelCacheEntry>;
 
 // core-auth writes the live per-provider catalog here on login / "Refresh models".
 function modelCache(configDir: string): ModelCacheMap {
-  for (const f of ["models.json", "core-auth-models.json"]) {
-    try {
-      const p = join(configFolder(configDir), f);
-      if (existsSync(p)) return JSON.parse(readFileSync(p, "utf8")) || {};
-    } catch {}
-  }
+  try {
+    const p = join(configFolder(configDir), "models.json");
+    if (existsSync(p)) return JSON.parse(readFileSync(p, "utf8")) || {};
+  } catch {}
   return {};
 }
 
