@@ -1,0 +1,8 @@
+rootProject.name = "core-proxy-java"
+
+// :routing  - SPIs + routing types + routing logic (Router/ModelMap/RateLimit/Provider),
+//             transpilable Java 8, no gson/net/nio/reflect/threads.
+// :teavm    - TeaVM JS export surface over :routing (SimpleJsonCodec, JsHttpClientBridge,
+//             JsStoreBridge, CoreProxyJs) -> generateJavaScript emits an ES2015 module.
+include ":routing"
+include ":teavm"

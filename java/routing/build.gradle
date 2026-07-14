@@ -1,0 +1,4 @@
+// SPIs + routing types + routing logic. Zero-dependency by design (no gson/java.net/java.nio/
+// reflection/threads) so this module transpiles cleanly under TeaVM (see ../teavm).
+dependencies {
+}
