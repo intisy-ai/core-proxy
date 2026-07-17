@@ -69,7 +69,7 @@ public final class Router {
             }
             HttpResponse resp;
             try {
-                resp = handler.handle(req, new HandlerCtx(opts.configDir, opts.log, assigned.model));
+                resp = handler.handle(req, new HandlerCtx(opts.configDir, opts.store, opts.log, assigned.model));
             } catch (Exception e) {
                 log(opts, "handler error for " + assigned.provider + ": " + e.getMessage());
                 lastResp = errorResponse(502, "Provider handler failed: " + e.getMessage(), opts.json);

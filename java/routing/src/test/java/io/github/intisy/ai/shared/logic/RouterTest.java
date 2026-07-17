@@ -17,6 +17,7 @@ import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -137,6 +138,29 @@ class RouterTest {
 
         assertEquals(429, resp.status);
         assertTrue(resp.body.contains("rate_limit_error"));
+    }
+
+    @Test
+    void handlerReceivesInjectedStore() {
+        InMemoryStore store = new InMemoryStore();
+        store.put(CONFIG_FILE, "{\"modelMap\":{\"opus\":[{\"provider\":\"cap\",\"model\":\"m-cap\"}]}}");
+        RouterOptions opts = baseOptions(store);
+        final io.github.intisy.ai.shared.spi.Store[] seen = new io.github.intisy.ai.shared.spi.Store[1];
+        Map<String, ProxyHandler> registry = new HashMap<>();
+        registry.put("cap", (req, ctx) -> {
+            seen[0] = ctx.store;
+            HttpResponse resp = new HttpResponse();
+            resp.status = 200;
+            resp.headers = new HashMap<>();
+            resp.body = "ok";
+            return resp;
+        });
+        opts.resolveHandler = HandlerResolvers.fromRegistry(registry);
+        opts.listProviders = () -> List.of("cap");
+
+        Router.route(post("/v1/messages", "{}"), opts);
+
+        assertSame(store, seen[0], "the router must thread RouterOptions.store into HandlerCtx.store");
     }
 
     // -- routeJson smoke ---------------------------------------------------------
