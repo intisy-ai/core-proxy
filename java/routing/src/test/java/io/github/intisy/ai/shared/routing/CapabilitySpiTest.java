@@ -113,32 +113,46 @@ class CapabilitySpiTest {
         assertEquals("claude-sonnet-4", models.get(1).id);
     }
 
-    // -- QuotaBar / QuotaProvider --------------------------------------------------------------
+    // -- QuotaBar / AccountQuota / QuotaProvider ----------------------------------------------
 
     @Test
     void quotaBar_fieldsRoundTrip() {
-        QuotaBar bar = new QuotaBar("acct-1", "user@example.com", "active", "5-hour", 0.75, "2026-07-18T00:00:00Z");
-        assertEquals("acct-1", bar.accountId);
-        assertEquals("user@example.com", bar.accountEmail);
-        assertEquals("active", bar.accountStatus);
+        QuotaBar bar = new QuotaBar("5-hour", 0.75, "2026-07-18T00:00:00Z");
         assertEquals("5-hour", bar.label);
         assertEquals(0.75, bar.remainingFraction);
         assertEquals("2026-07-18T00:00:00Z", bar.resetTime);
     }
 
+    @Test
+    void accountQuota_fieldsRoundTrip() {
+        AccountQuota acct = new AccountQuota("acct-1", "user@example.com", "active",
+                Collections.singletonList(new QuotaBar("5-hour", 0.5, null)));
+        assertEquals("acct-1", acct.accountId);
+        assertEquals("user@example.com", acct.accountEmail);
+        assertEquals("active", acct.accountStatus);
+        assertEquals(1, acct.bars.size());
+        assertEquals("5-hour", acct.bars.get(0).label);
+    }
+
     private static final class FakeQuotaProvider implements QuotaProvider {
-        public List<QuotaBar> quota(HandlerCtx ctx) {
-            return Collections.singletonList(new QuotaBar("acct-1", null, "active", "5-hour", 0.5, null));
+        public List<AccountQuota> quota(HandlerCtx ctx) {
+            return Arrays.asList(
+                    new AccountQuota("acct-1", "user@example.com", "active",
+                            Collections.singletonList(new QuotaBar("5-hour", 0.5, null))),
+                    // An errored account with NO bars must still be represented (not vanish).
+                    new AccountQuota("acct-2", null, "error", Collections.<QuotaBar>emptyList()));
         }
     }
 
     @Test
-    void quotaProvider_isImplementable_andReturnsPopulatedBars() {
+    void quotaProvider_isImplementable_andPreservesBarlessAccounts() {
         QuotaProvider provider = new FakeQuotaProvider();
-        List<QuotaBar> bars = provider.quota(new HandlerCtx());
-        assertEquals(1, bars.size());
-        assertEquals("acct-1", bars.get(0).accountId);
-        assertEquals(0.5, bars.get(0).remainingFraction);
+        List<AccountQuota> accounts = provider.quota(new HandlerCtx());
+        assertEquals(2, accounts.size());
+        assertEquals("acct-1", accounts.get(0).accountId);
+        assertEquals(0.5, accounts.get(0).bars.get(0).remainingFraction);
+        assertEquals("error", accounts.get(1).accountStatus);
+        assertTrue(accounts.get(1).bars.isEmpty(), "an account with no bars is still present");
     }
 
     // -- AuthorizeInfo / OAuthProvider ---------------------------------------------------------
