@@ -1,0 +1,4 @@
+[submodule "core-ir"]
+	path = core-ir
+	url = https://github.com/intisy-ai/core-ir.git
+	branch = main

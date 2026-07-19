@@ -1,4 +1,13 @@
 // SPIs + routing types + routing logic. Zero-dependency by design (no gson/java.net/java.nio/
 // reflection/threads) so this module transpiles cleanly under TeaVM (see ../teavm).
 dependencies {
+    // core-ir's IR types + Translator SPI (SP-3): RoutingProfile.translator and Provider.handleIr
+    // reference io.github.intisy.ai.ir.{IrRequest,IrResponse}/ir.spi.Translator. Same "keep the
+    // shipped jar thin" discipline the provider modules use for :routing itself (see
+    // claude-code-auth/java/claude-provider/build.gradle) -- core-proxy does not construct any
+    // Translator instance itself (that is the front-door caller's job), so compileOnly keeps :ir's
+    // classes out of routing's own built jar; testImplementation re-adds it so RouterTest can
+    // construct a real AnthropicTranslator to prove the IR front-door path end to end.
+    compileOnly project(":ir")
+    testImplementation project(":ir")
 }

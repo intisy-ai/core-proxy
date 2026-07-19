@@ -1,5 +1,8 @@
 package io.github.intisy.ai.shared.routing;
 
+import io.github.intisy.ai.ir.IrRequest;
+import io.github.intisy.ai.ir.IrResponse;
+
 /**
  * Runtime extension point that a provider module implements to serve one provider id's
  * requests. This is the seam Task 3/4 of the Phase 4 plan dynamically load: a JVM host
@@ -23,4 +26,23 @@ public interface Provider extends ProxyHandler {
      * assigns via {@link io.github.intisy.ai.shared.logic.ModelMap}/{@code Assignment}).
      */
     String id();
+
+    /**
+     * IR-native alternative to {@link #handle} (SP-3, the layering flip): receives an already
+     * app-wire-decoded {@link IrRequest} and returns an {@link IrResponse}, with no app-wire
+     * format knowledge in the provider at all — the front-door (Router/proxy server) owns
+     * decoding the inbound app request into IR (via {@link RoutingProfile#translator}) and
+     * encoding the returned {@link IrResponse} back to the app's wire format.
+     *
+     * <p>Default throws {@link UnsupportedOperationException} so a legacy provider (one that
+     * only implements {@link #handle}) needs zero changes to keep working — {@code Router}
+     * treats that specific exception as "this provider has no IR path" and falls back to
+     * calling {@link #handle} with the original request, exactly as before. A provider that
+     * migrates overrides this method; the Router prefers it over {@link #handle} whenever the
+     * routing profile also supplies a {@link RoutingProfile#translator}. Both paths coexist
+     * (coexist-then-remove) until every provider and caller has migrated (T4).
+     */
+    default IrResponse handleIr(IrRequest request, HandlerCtx ctx) throws Exception {
+        throw new UnsupportedOperationException(id() + " has no handleIr — legacy handle() only");
+    }
 }

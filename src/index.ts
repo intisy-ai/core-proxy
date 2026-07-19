@@ -1,5 +1,10 @@
 export type {
   HandlerCtx,
+  IrEventStream,
+  IrRequest,
+  IrResponse,
+  IrStreamEvent,
+  VendorTranslator,
   ProxyHandler,
   HandlerResolver,
   Assignment,

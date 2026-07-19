@@ -1,8 +1,11 @@
 package io.github.intisy.ai.shared.logic;
 
+import io.github.intisy.ai.ir.IrRequest;
+import io.github.intisy.ai.ir.IrResponse;
 import io.github.intisy.ai.shared.routing.Assignment;
 import io.github.intisy.ai.shared.routing.CatalogEntry;
 import io.github.intisy.ai.shared.routing.HandlerCtx;
+import io.github.intisy.ai.shared.routing.Provider;
 import io.github.intisy.ai.shared.routing.ProxyHandler;
 import io.github.intisy.ai.shared.spi.JsonCodec;
 import io.github.intisy.ai.shared.spi.http.HttpRequest;
@@ -37,7 +40,14 @@ public final class Router {
         if ("/health".equals(path)) return textResponse(200, "ok");
         if ("/v1/models".equals(path) || path.startsWith("/v1/models/")) return modelsResponse(path, opts);
 
-        List<Assignment> chain = resolveAssignment(req, opts);
+        // SP-3 front-door: decode the inbound app-wire body into the canonical IR exactly once,
+        // when this profile has a translator (anthropicProfile/opencodeProfile do; a profile that
+        // never sets one stays on the legacy path below, unchanged). A decode failure (malformed
+        // body, or a translator that cannot parse it) also falls back to the legacy path rather
+        // than failing the request -- this is additive, never a hard requirement.
+        IrRequest ir = decodeIr(req, opts);
+
+        List<Assignment> chain = ir != null ? resolveAssignmentForModel(ir.model, opts) : resolveAssignment(req, opts);
         if (chain.isEmpty()) {
             return errorResponse(503, "No provider/model assigned for this tier. Run cc auth -> Providers.", opts.json);
         }
@@ -67,13 +77,35 @@ public final class Router {
                 lastResp = errorResponse(503, "Provider '" + assigned.provider + "' has no proxy handler installed.", opts.json);
                 continue;
             }
-            HttpResponse resp;
-            try {
-                resp = handler.handle(req, new HandlerCtx(opts.configDir, opts.store, opts.log, assigned.model));
-            } catch (Exception e) {
-                log(opts, "handler error for " + assigned.provider + ": " + e.getMessage());
-                lastResp = errorResponse(502, "Provider handler failed: " + e.getMessage(), opts.json);
-                continue;
+            HandlerCtx ctx = new HandlerCtx(opts.configDir, opts.store, opts.log, assigned.model);
+            HttpResponse resp = null;
+            boolean handled = false;
+            // Prefer the IR path when both sides support it: this profile decoded an IR request
+            // AND the resolved handler is a Provider that overrides handleIr. A legacy-only
+            // Provider throws UnsupportedOperationException (Provider's default) -- caught below
+            // and treated as "no IR path here", falling through to the ORIGINAL handle() call so
+            // nothing breaks mid-migration (coexist-then-remove).
+            if (ir != null && handler instanceof Provider) {
+                try {
+                    IrResponse irResp = ((Provider) handler).handleIr(ir, ctx);
+                    resp = wireResponse(opts.profile.translator.encodeResponse(irResp));
+                    handled = true;
+                } catch (UnsupportedOperationException notIrCapable) {
+                    // fall through to the legacy handle() call below
+                } catch (Exception e) {
+                    log(opts, "handleIr error for " + assigned.provider + ": " + e.getMessage());
+                    lastResp = errorResponse(502, "Provider handler failed: " + e.getMessage(), opts.json);
+                    continue;
+                }
+            }
+            if (!handled) {
+                try {
+                    resp = handler.handle(req, ctx);
+                } catch (Exception e) {
+                    log(opts, "handler error for " + assigned.provider + ": " + e.getMessage());
+                    lastResp = errorResponse(502, "Provider handler failed: " + e.getMessage(), opts.json);
+                    continue;
+                }
             }
             lastResp = resp;
             if (RateLimit.isRateLimited(resp)) {
@@ -114,7 +146,15 @@ public final class Router {
     // fallbacks). Healed: stale/unset tiers auto-derive to the current catalog, so routing
     // tracks a model refresh even if never re-assigned.
     private static List<Assignment> resolveAssignment(HttpRequest req, RouterOptions opts) {
-        String requested = requestedModel(req, opts.json);
+        return resolveAssignmentForModel(requestedModel(req, opts.json), opts);
+    }
+
+    // SP-3: same tier/model-map resolution as resolveAssignment above, but the requested model is
+    // supplied directly instead of being parsed out of the raw wire body -- the IR path (route())
+    // already decoded the body into an IrRequest and reads IrRequest.model, the neutral field name
+    // shared by every vendor's IR, instead of re-parsing vendor-specific wire JSON here.
+    private static List<Assignment> resolveAssignmentForModel(String requestedRaw, RouterOptions opts) {
+        String requested = requestedRaw == null ? "" : requestedRaw;
         Map<String, List<Assignment>> map = ModelMap.resolveModelMap(opts.store, opts.json, opts.profile);
 
         // Exact-id match first: the wrapper injects each tier's primary model id as an env
@@ -181,6 +221,34 @@ public final class Router {
             // malformed/non-JSON body — treat as no requested model, mirrors the JS try/catch
         }
         return "";
+    }
+
+    // -- SP-3 IR front-door -----------------------------------------------------
+
+    // Decodes the inbound app-wire body into the canonical IR via this profile's translator, when
+    // one is configured. Returns null (never throws) when there is no translator, no body, or the
+    // decode itself fails -- any of those means "use the legacy path", not "fail the request".
+    private static IrRequest decodeIr(HttpRequest req, RouterOptions opts) {
+        if (opts.profile.translator == null || req.body == null || req.body.isEmpty()) return null;
+        try {
+            return opts.profile.translator.decodeRequest(req.body);
+        } catch (Exception e) {
+            log(opts, "IR decode failed, falling back to legacy routing: " + e.getMessage());
+            return null;
+        }
+    }
+
+    // Wraps an already-encoded app-wire JSON string (this profile's translator's encodeResponse
+    // output) into an HttpResponse, matching the shape jsonResponse() below would produce for the
+    // legacy path (so downstream rate-limit/response handling in route() treats both identically).
+    private static HttpResponse wireResponse(String wireJson) {
+        HttpResponse resp = new HttpResponse();
+        resp.status = 200;
+        Map<String, String> headers = new LinkedHashMap<>();
+        headers.put("content-type", "application/json");
+        resp.headers = headers;
+        resp.body = wireJson;
+        return resp;
     }
 
     // -- /v1/models catalog ---------------------------------------------------

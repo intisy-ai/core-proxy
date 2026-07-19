@@ -1,5 +1,7 @@
 package io.github.intisy.ai.shared.routing;
 
+import io.github.intisy.ai.ir.spi.Translator;
+
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -22,6 +24,15 @@ public class RoutingProfile {
     public int defaultOutput;
     public NativeRateLimit nativeRateLimit;
     public Pattern nativeModelPattern;
+    /**
+     * SP-3: the app&lt;-&gt;IR translator for this profile (e.g. {@code AnthropicTranslator} for
+     * Claude Code / OpenCode, both of which speak the Anthropic wire format). {@code null} means
+     * this profile has no IR front-door yet — {@link io.github.intisy.ai.shared.logic.Router}
+     * then uses ONLY the legacy {@link ProxyHandler#handle} path, so an existing profile that
+     * never sets this field keeps working unchanged (additive/coexist, per the canonical IR
+     * design's incremental sequencing).
+     */
+    public Translator translator;
 
     /**
      * Builds a native-shaped rate-limit {@link Synth} response from observed
@@ -52,6 +63,7 @@ public class RoutingProfile {
         c.defaultOutput = defaultOutput;
         c.nativeRateLimit = nativeRateLimit;
         c.nativeModelPattern = nativeModelPattern;
+        c.translator = translator;
         return c;
     }
 

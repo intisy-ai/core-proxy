@@ -1,11 +1,32 @@
+// SP-3: the canonical IR types + per-vendor translator API, type-only (erased at build time --
+// core-proxy's own compiled dist/server.js never imports core-ir at runtime; only a caller that
+// actually constructs a translator instance, e.g. a profile or a test, pulls in the real module).
+// core-ir is a submodule (./core-ir) built the same way claude-code-auth/stub-auth's provider
+// modules consume it -- see ./core-ir/README.md and this repo's java/settings.gradle :ir alias.
+import type { IrRequest, IrResponse, IrStreamEvent, VendorTranslator } from "../core-ir/dist/index.js";
+export type { IrRequest, IrResponse, IrStreamEvent, VendorTranslator } from "../core-ir/dist/index.js";
+
 export type HandlerCtx = {
   configDir: string;
   log: (m: string) => void;
   model: string;
 };
 
+// A stream of canonical IR events, produced directly by an IR-native provider's handleIr (not
+// vendor SSE bytes -- those only exist at the wire boundary, decoded/encoded by the translator).
+export type IrEventStream = ReadableStream<IrStreamEvent>;
+
 export type ProxyHandler = {
   handle: (request: Request, ctx: HandlerCtx) => Promise<Response>;
+  /**
+   * SP-3 IR-native alternative to `handle`: receives an already app-wire-decoded IrRequest and
+   * returns an IrResponse (non-streaming) or an IrEventStream (streaming), with zero app-wire
+   * format knowledge in the handler itself -- the front-door (server.ts route()) owns decoding
+   * the inbound request into IR (via RoutingProfile.translator) and encoding the result back to
+   * the app's wire format. Optional: a legacy handler simply omits it, and the server falls back
+   * to calling `handle` unchanged (coexist-then-remove, per the canonical IR design doc).
+   */
+  handleIr?: (ir: IrRequest, ctx: HandlerCtx) => Promise<IrResponse | IrEventStream>;
 };
 
 export type HandlerResolver = (providerName: string) => Promise<ProxyHandler | null>;
@@ -55,6 +76,15 @@ export type RoutingProfile = {
   // matches, the "not in catalog" notification is suppressed. Optional — when
   // absent, unknown models always notify.
   nativeModelPattern?: RegExp;
+  /**
+   * SP-3: the app<->IR translator for this profile (e.g. core-ir's `translators.anthropic` for
+   * Claude Code / OpenCode, both of which speak the Anthropic wire format). An injected instance
+   * rather than a name/key — profiles already carry functions (nativeRateLimit), so this matches
+   * the existing shape and needs no separate registry. Undefined means this profile has no IR
+   * front-door yet: the server then uses ONLY the legacy handle() path unconditionally, so an
+   * existing profile that never sets this field keeps working unchanged (additive/coexist).
+   */
+  translator?: VendorTranslator;
 };
 
 export type ProxyOptions = {

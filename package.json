@@ -10,6 +10,10 @@
   "keywords": ["proxy", "routing", "anthropic", "ai", "intisy", "core-proxy"],
   "files": ["dist/", "README.md", "LICENSE"],
   "engines": { "node": ">=20.0.0" },
-  "scripts": { "build": "tsc", "test": "vitest run", "prepublishOnly": "npm run build" },
+  "scripts": {
+    "build": "npm --prefix core-ir install && npm --prefix core-ir run build && tsc",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
   "devDependencies": { "typescript": "^5.6.0", "vitest": "^2.1.0", "@types/node": "^22.0.0", "esbuild": "^0.21.5" }
 }

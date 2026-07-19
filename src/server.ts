@@ -11,7 +11,7 @@ import { createServer, type Server } from "node:http";
 import { Readable } from "node:stream";
 import { resolveModelMap, catalogEntries } from "./model-map.js";
 import { isRateLimited, rateLimitResetMs, rateLimitFinal } from "./rate-limit.js";
-import type { Assignment, CatalogEntry, Chain, ProxyOptions, ProxyServer, RoutingProfile } from "./types.js";
+import type { Assignment, CatalogEntry, Chain, IrEventStream, IrRequest, IrResponse, ProxyOptions, ProxyServer, RoutingProfile } from "./types.js";
 
 function errorResponse(status: number, message: string): Response {
   return new Response(JSON.stringify({ type: "error", error: { type: "loader_proxy_error", message } }), {
@@ -99,6 +99,14 @@ export function createProxyServer(opts: ProxyOptions): ProxyServer {
   async function resolveAssignment(request: Request): Promise<Chain> {
     let requested = "";
     try { requested = ((await request.clone().json()) || {}).model || ""; } catch {}
+    return resolveAssignmentForModel(requested);
+  }
+
+  // SP-3: same tier/model-map resolution as resolveAssignment above, but the requested model is
+  // supplied directly instead of being parsed out of the raw wire body — the IR front door already
+  // decoded the body into an IrRequest and reads IrRequest.model, the neutral field name shared by
+  // every vendor's IR, instead of re-parsing vendor-specific wire JSON here.
+  async function resolveAssignmentForModel(requested: string): Promise<Chain> {
     const map = resolveModelMap(configDir, opts.profile);
     // Exact-id match first: the wrapper injects each tier's primary model id as an
     // env var, so the request model can be a backend id carrying no tier keyword —
@@ -120,12 +128,47 @@ export function createProxyServer(opts: ProxyOptions): ProxyServer {
     return (map[slot] && map[slot].length) ? map[slot] : (map.default || []);
   }
 
+  // Decodes the inbound app-wire body into the canonical IR via this profile's translator, when
+  // one is configured. Returns null (never throws) when there is no translator, no body, or the
+  // decode itself fails — any of those means "use the legacy path", not "fail the request".
+  async function decodeIr(request: Request): Promise<IrRequest | null> {
+    if (!opts.profile.translator) return null;
+    try {
+      const bodyText = await request.clone().text();
+      if (!bodyText) return null;
+      return await opts.profile.translator.decodeRequest(bodyText);
+    } catch (e) {
+      log("IR decode failed, falling back to legacy routing: " + ((e as Error)?.message));
+      return null;
+    }
+  }
+
+  // Encodes an IR-native handler's result back to the app's wire format via this profile's
+  // translator: a non-streaming IrResponse becomes one JSON body; an IrEventStream (true
+  // streaming — canonical IR events produced directly by the provider, never buffered) is piped
+  // through the translator's stateful encoder to the vendor's SSE text, then to bytes.
+  async function encodeIrResult(irResult: IrResponse | IrEventStream): Promise<Response> {
+    const translator = opts.profile.translator!;
+    if (irResult instanceof ReadableStream) {
+      const encodeStream = await translator.encodeStream();
+      const byteStream = irResult.pipeThrough(encodeStream).pipeThrough(new TextEncoderStream());
+      return new Response(byteStream, { status: 200, headers: { "content-type": "text/event-stream" } });
+    }
+    const wire = await translator.encodeResponse(irResult);
+    return new Response(wire, { status: 200, headers: { "content-type": "application/json" } });
+  }
+
   async function route(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/health") return new Response("ok", { status: 200 });
     if (url.pathname === "/v1/models" || url.pathname.startsWith("/v1/models/")) return modelsResponse(url, configDir, opts.profile);
 
-    const chain = await resolveAssignment(request);
+    // SP-3 front-door: decode the inbound app-wire body into the canonical IR exactly once, when
+    // this profile has a translator (anthropicProfile/opencodeProfile do; a profile that never
+    // sets one stays on the legacy path below, unchanged).
+    const ir = await decodeIr(request);
+
+    const chain = ir ? await resolveAssignmentForModel(ir.model || "") : await resolveAssignment(request);
     if (!chain.length) {
       return errorResponse(503, "No provider/model assigned for this tier. Run cc auth -> Providers.");
     }
@@ -153,13 +196,29 @@ export function createProxyServer(opts: ProxyOptions): ProxyServer {
         lastResp = errorResponse(503, "Provider '" + assigned.provider + "' has no proxy handler installed.");
         continue;
       }
+      const ctx = { configDir, log, model: assigned.model };
       let resp: Response;
-      try {
-        resp = await handler.handle(request, { configDir, log, model: assigned.model });
-      } catch (e) {
-        log("handler error for " + assigned.provider + ": " + ((e as Error)?.message));
-        lastResp = errorResponse(502, "Provider handler failed: " + ((e as Error)?.message));
-        continue;
+      // Prefer the IR path when both sides support it: this profile decoded an IR request AND the
+      // resolved handler exposes handleIr. A legacy handler (no handleIr) or a profile with no
+      // translator (ir === null) simply falls through to the ORIGINAL handle() call below, so
+      // nothing breaks mid-migration (coexist-then-remove).
+      if (ir && typeof handler.handleIr === "function") {
+        try {
+          const irResult = await handler.handleIr(ir, ctx);
+          resp = await encodeIrResult(irResult);
+        } catch (e) {
+          log("handleIr error for " + assigned.provider + ": " + ((e as Error)?.message));
+          lastResp = errorResponse(502, "Provider handler failed: " + ((e as Error)?.message));
+          continue;
+        }
+      } else {
+        try {
+          resp = await handler.handle(request, ctx);
+        } catch (e) {
+          log("handler error for " + assigned.provider + ": " + ((e as Error)?.message));
+          lastResp = errorResponse(502, "Provider handler failed: " + ((e as Error)?.message));
+          continue;
+        }
       }
       lastResp = resp;
       if (isRateLimited(resp)) {
