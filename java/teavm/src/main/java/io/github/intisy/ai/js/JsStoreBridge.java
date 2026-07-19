@@ -12,33 +12,27 @@ import java.util.List;
 import java.util.function.UnaryOperator;
 
 /**
- * Phase 3 Task 1: the LIVE {@link Store} — a {@code shared} {@code Store} implementation that
- * delegates every call straight through to a JS-provided store object, instead of
- * {@link InMemoryStore}'s one-shot snapshot (see {@link AiJavaJs#seedStore}, which this bridge
- * replaces for {@link AiJavaJs#routeJsonAsync}). Any mutation shared's routing/selection/
- * rate-limit logic makes during a call (e.g. {@code Selection}'s round-robin cursor advance,
- * {@code AccountManager}'s {@code coolingDownUntil}/{@code rateLimitResetTimes} writes) lands
- * directly on the JS object the caller supplied, so it is visible to the NEXT call that reuses
- * the same JS store instance — the whole point of "live" vs. "snapshot".
+ * A live {@link Store} that delegates every call straight through to a JS-provided store object,
+ * instead of {@link InMemoryStore}'s one-shot snapshot. Any mutation the routing logic makes during a
+ * call lands directly on the JS object the caller supplied, so it is visible to the next call that
+ * reuses the same JS store instance: live rather than snapshot.
  */
 public final class JsStoreBridge implements Store {
 
     /**
      * The JS-provided live store: {@code get}/{@code put}/{@code exists}/{@code delete}/
-     * {@code listKeys}, all SYNCHRONOUS. This is intentionally NOT async (contrast
-     * {@link JsHttpClientBridge.JsHttpSend}, which must be async because {@code fetch} is):
-     * JS is single-threaded and has no preemption, so two synchronous calls back into the same
-     * JS object with no {@code await}/yield point between them can never be interleaved by any
-     * other JS code — see {@link #update} for why that is exactly the atomicity {@link Store}'s
-     * contract asks for, with no actual lock needed.
+     * {@code listKeys}, all synchronous. This is intentionally not async (contrast
+     * {@link JsHttpClientBridge.JsHttpSend}, which must be async because {@code fetch} is): JS is
+     * single-threaded and has no preemption, so two synchronous calls back into the same JS object
+     * with no {@code await}/yield point between them can never be interleaved by any other JS code
+     * (see {@link #update} for why that is exactly the atomicity {@link Store}'s contract asks for,
+     * with no actual lock needed).
      *
      * <p>Every method here is a plain (non-generic) JSO interface method, so TeaVM's normal
-     * String/array marshalling would apply at these boundaries too — but per the Task-5 gotcha
-     * (see {@link JsHttpClientBridge.JsHttpSend}'s javadoc), values that also cross a generic
-     * boundary elsewhere (e.g. inside a lambda closure, or if this type is ever used through a
-     * generic callback) are safest carried as {@link JSString} throughout, so String conversion
-     * happens only at the explicit {@code JSString.valueOf}/{@code .stringValue()} edges in
-     * {@link JsStoreBridge}'s own method bodies below. Consistent with {@code JsHttpSend}.
+     * String/array marshalling would apply at these boundaries too, but per the marshalling gotcha
+     * documented on {@link JsHttpClientBridge.JsHttpSend}, values that also cross a generic boundary
+     * elsewhere are safest carried as {@link JSString} throughout, so String conversion happens only
+     * at the explicit {@code JSString.valueOf}/{@code .stringValue()} edges below.
      */
     public interface JsStore extends JSObject {
         /** Returns the stored JSON string for {@code key}, or {@code null}/{@code undefined} when absent. */
@@ -81,12 +75,12 @@ public final class JsStoreBridge implements Store {
     }
 
     /**
-     * {@code get} then {@code put} — two separate synchronous round trips into the JS store,
+     * {@code get} then {@code put}: two separate synchronous round trips into the JS store,
      * with no suspension point (no {@code @Async}, no promise, no callback) between them. Since
      * JS has no preemptive concurrency, nothing else on the event loop can observe or mutate the
-     * key in between: the read-modify-write is atomic with respect to every other call this
-     * bridge (or anything else running in the same JS runtime) can make, exactly matching
-     * {@link Store#update}'s "must be atomic; that is the implementation's concern" contract —
+     * key in between: the read-modify-write is atomic with respect to every other call this bridge
+     * (or anything else running in the same JS runtime) can make, exactly matching
+     * {@link Store#update}'s "must be atomic; that is the implementation's concern" contract,
      * satisfied here by the single-threaded host rather than by an actual lock.
      */
     @Override
@@ -109,10 +103,9 @@ public final class JsStoreBridge implements Store {
         return out;
     }
 
-    // A JS store's get() may return either `null` or `undefined` for an absent key depending on
-    // how the caller implemented it (e.g. a bare `Map.get` returns `undefined`, a defensive
-    // ternary returns `null`) — shared's Store SPI only knows "absent" as Java `null`, so both
-    // collapse to that here.
+    // A JS store's get() may return either `null` or `undefined` for an absent key depending on how
+    // the caller implemented it (e.g. a bare `Map.get` returns `undefined`, a defensive ternary
+    // returns `null`); the Store SPI only knows "absent" as Java `null`, so both collapse to that here.
     private static String toJavaStringOrNull(JSString value) {
         if (value == null || JSObjects.isUndefined(value)) return null;
         return value.stringValue();

@@ -12,10 +12,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Shape + implementability contract for the optional provider capability SPI (E-A): each POJO's
- * public fields round-trip, and a trivial in-test implementation of each interface proves the
- * method signatures compile and can return populated objects — same intent as {@link
- * ProxyPluginTest} for {@link ProxyPlugin}.
+ * Shape and implementability contract for the optional provider capability SPI: each POJO's public
+ * fields round-trip, and a trivial in-test implementation of each interface proves the method
+ * signatures compile and can return populated objects (same intent as {@link ProxyPluginTest} for
+ * {@link ProxyPlugin}).
  */
 class CapabilitySpiTest {
 

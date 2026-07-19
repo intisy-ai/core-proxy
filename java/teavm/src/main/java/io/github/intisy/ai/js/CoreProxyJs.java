@@ -26,15 +26,9 @@ import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
- * TeaVM JS export surface over core-proxy's routing engine ({@code Router}/{@code ModelMap}) —
- * relocated from ai-java's {@code AiJavaJs} (Phase 4 Task 1), ROUTING-ONLY: every export that
- * touched the account/auth engine ({@code AccountManager}, {@code TokenRefresh}, {@code
- * AccountStore}, {@code Selection}, {@code RateLimitMath}) was dropped here — those relocate to
- * {@code core-auth}'s own Java module instead (Phase 4 Task 2), which is expected to define its
- * own JS export surface alongside this one. {@link #routeJsonAsync} in particular no longer
- * claims an account as part of its canned "test" handler (see this class's git history / the
- * original {@code AiJavaJs.routeJsonAsync} javadoc for the dropped demo) — it now just forwards
- * the request upstream via {@link JsHttpClientBridge}, nothing more.
+ * TeaVM JS export surface over core-proxy's routing engine ({@code Router}/{@code ModelMap}). The
+ * account/auth engine lives in core-auth's own Java module, which defines its own JS export surface
+ * alongside this one; every export here is routing-only.
  */
 public final class CoreProxyJs {
     private CoreProxyJs() {
@@ -43,11 +37,11 @@ public final class CoreProxyJs {
     private static final String CONFIG_FILE = "router-test.json";
 
     /**
-     * Synchronous smoke export: routes {@code requestJson} through a canned in-Java handler
-     * (no HttpClient involved at all). {@code storeJson} is a JSON object of
+     * Synchronous smoke export: routes {@code requestJson} through a canned in-Java handler (no
+     * HttpClient involved at all). {@code storeJson} is a JSON object of
      * {@code {storeKey: jsonStringValue}} used to seed the in-memory {@link Store} (e.g.
-     * {@code {"router-test.json":"{\"modelMap\":{...}}"}}) — Store values are themselves
-     * opaque JSON strings per the {@link Store} SPI contract.
+     * {@code {"router-test.json":"{\"modelMap\":{...}}"}}); Store values are themselves opaque JSON
+     * strings per the {@link Store} SPI contract.
      */
     @JSExport
     public static String routeJsonSync(String storeJson, String requestJson) {
@@ -57,11 +51,11 @@ public final class CoreProxyJs {
     }
 
     /**
-     * Integer-fidelity check: a bare parse+stringify round trip through {@link SimpleJsonCodec}
-     * (the same codec {@link #routeJsonSync}/{@link #routeJsonAsync} use internally), with no
-     * {@code Router} involved. Exists so a TS consumer test can prove — through the actually-
-     * shipped export surface, not a JVM-only unit test — that a whole-number JSON value stays
-     * byte-compatible with the JVM's gson-backed codec output for the same input.
+     * Integer-fidelity check: a bare parse+stringify round trip through {@link SimpleJsonCodec} (the
+     * same codec {@link #routeJsonSync}/{@link #routeJsonAsync} use internally), with no
+     * {@code Router} involved. Exists so a TS consumer test can prove, through the actually-shipped
+     * export surface, that a whole-number JSON value stays byte-compatible with the JVM's gson-backed
+     * codec output for the same input.
      */
     @JSExport
     public static String jsonRoundTrip(String json) {
@@ -96,11 +90,11 @@ public final class CoreProxyJs {
     }
 
     /**
-     * {@code ModelMap.resolveTiers} export over a ONE-SHOT store snapshot (parity/test use —
-     * see {@link #resolveTiers} for the production version over a LIVE JS store). {@code
-     * profileJson} supplies {@code tierSourceProvider}/{@code tierOrder}/{@code tierFallback}/
-     * {@code tierRegex}; {@code storeJson} is a Store snapshot (typically just a seeded
-     * {@code models.json}). Returns the resolved tier list as a JSON array.
+     * {@code ModelMap.resolveTiers} export over a one-shot store snapshot (parity/test use; see
+     * {@link #resolveTiers} for the version over a live JS store). {@code profileJson} supplies
+     * {@code tierSourceProvider}/{@code tierOrder}/{@code tierFallback}/{@code tierRegex};
+     * {@code storeJson} is a Store snapshot (typically just a seeded {@code models.json}). Returns the
+     * resolved tier list as a JSON array.
      */
     @JSExport
     public static String resolveTiersJson(String profileJson, String storeJson) {
@@ -112,8 +106,8 @@ public final class CoreProxyJs {
     }
 
     /**
-     * {@code ModelMap.resolveModelMap} export over a ONE-SHOT store snapshot (parity/test use —
-     * see {@link #resolveModelMap} for the production version over a LIVE JS store). Returns
+     * {@code ModelMap.resolveModelMap} export over a one-shot store snapshot (parity/test use; see
+     * {@link #resolveModelMap} for the version over a live JS store). Returns
      * {@code {tier: [{provider,model,name,derived}, ...]}} as JSON.
      */
     @JSExport
@@ -126,11 +120,10 @@ public final class CoreProxyJs {
     }
 
     /**
-     * PRODUCTION export: {@code ModelMap.resolveTiers} over the LIVE JS store ({@code jsStore},
-     * bridged via {@link JsStoreBridge} — no snapshot/discard), reading the tier-source
-     * provider's catalog from store key {@code models.json} exactly as a real provider driver
-     * would. {@code profileJson} shape matches {@link #resolveTiersJson}'s. Returns the resolved
-     * tier list as a JSON array of strings.
+     * {@code ModelMap.resolveTiers} over the live JS store ({@code jsStore}, bridged via
+     * {@link JsStoreBridge}, no snapshot), reading the tier-source provider's catalog from store key
+     * {@code models.json}. {@code profileJson} shape matches {@link #resolveTiersJson}'s. Returns the
+     * resolved tier list as a JSON array of strings.
      */
     @JSExport
     public static String resolveTiers(String profileJson, JsStoreBridge.JsStore jsStore) {
@@ -142,10 +135,9 @@ public final class CoreProxyJs {
     }
 
     /**
-     * PRODUCTION export: {@code ModelMap.resolveModelMap} over the LIVE JS store (key
-     * {@code profile.configFile} for the stored {@code modelMap}, plus {@code models.json} for
-     * the live catalog) — the fine-grained call a TS driver makes instead of routing a whole
-     * request through {@link #routeJsonAsync}. Returns
+     * {@code ModelMap.resolveModelMap} over the live JS store (key {@code profile.configFile} for the
+     * stored {@code modelMap}, plus {@code models.json} for the live catalog): the fine-grained call
+     * a TS driver makes instead of routing a whole request through {@link #routeJsonAsync}. Returns
      * {@code {tier: [{provider,model,name,derived}, ...]}} JSON.
      */
     @JSExport
@@ -174,7 +166,7 @@ public final class CoreProxyJs {
         return json.stringify(out);
     }
 
-    // -- parity-export helpers ------------------------------------------------------
+    // -- profile helpers ------------------------------------------------------
 
     private static RoutingProfile profileFromJson(JsonCodec json, String profileJson) {
         Map<?, ?> m = (Map<?, ?>) json.parse(profileJson);
@@ -205,40 +197,36 @@ public final class CoreProxyJs {
     }
 
     /**
-     * THE decisive export: routes {@code requestJson} through the shared {@code Router}, whose
-     * single registered provider handler forwards the request upstream via
-     * {@link JsHttpClientBridge} — a blocking-shaped {@code HttpClient.send} actually backed by
-     * the JS-provided {@code httpSend} async function (production: {@code fetch}; test harness:
-     * a mocked, delayed resolve). Returns a JS {@code Promise<string>}: the whole
-     * synchronous-looking Java call chain (routeJson -&gt; handle -&gt; HttpClient.send)
-     * suspends at the {@code @Async} native boundary and resumes when the JS Promise the caller
-     * supplied settles, all inside the {@link Thread} started below (TeaVM's own
+     * Routes {@code requestJson} through the shared {@code Router}, whose single registered provider
+     * handler forwards the request upstream via {@link JsHttpClientBridge}: a blocking-shaped
+     * {@code HttpClient.send} actually backed by the JS-provided {@code httpSend} async function
+     * (production: {@code fetch}; test harness: a mocked, delayed resolve). Returns a JS
+     * {@code Promise<string>}: the whole synchronous-looking Java call chain (routeJson -&gt; handle
+     * -&gt; HttpClient.send) suspends at the {@code @Async} native boundary and resumes when the JS
+     * Promise the caller supplied settles, all inside the {@link Thread} started below (TeaVM's own
      * {@code JSPromise.callAsync} uses the identical Thread-based mechanism internally).
      *
-     * <p>{@code jsStore} is the LIVE JS store object itself, bridged via {@link JsStoreBridge} —
-     * no snapshot/discard. Routing-only: the "test" provider handler below is a bare forward
-     * (no account claiming/selection) — see this class's javadoc for why that demo bit was
-     * dropped relative to ai-java's original {@code routeJsonAsync}.
+     * <p>{@code jsStore} is the live JS store object itself, bridged via {@link JsStoreBridge}, no
+     * snapshot. The registered provider handler is a bare forward with no account claiming.
      */
     @JSExport
     public static JSPromise<JSString> routeJsonAsync(JsHttpClientBridge.JsHttpSend httpSend,
                                                        JsStoreBridge.JsStore jsStore, String requestJson) {
-        // Not JSPromise.callAsync(Callable<T>): its internal resolve.accept(result) is a
-        // generic JSConsumer<T> call, which (per the JsHttpSend javadoc) leaks a raw jl_String
-        // wrapper into the resolved value instead of a real JS string. Building the promise by
-        // hand lets us convert explicitly via JSString.valueOf right before the resolve/reject
-        // call — the actual CPS-suspension mechanism (a real Thread whose body reaches the
-        // @Async awaitSend boundary) is identical to what callAsync does internally.
+        // Not JSPromise.callAsync(Callable<T>): its internal resolve.accept(result) is a generic
+        // JSConsumer<T> call, which (per the JsHttpSend javadoc) leaks a raw jl_String wrapper into
+        // the resolved value instead of a real JS string. Building the promise by hand lets us convert
+        // explicitly via JSString.valueOf right before the resolve/reject call; the CPS-suspension
+        // mechanism (a real Thread whose body reaches the @Async awaitSend boundary) is identical to
+        // what callAsync does internally.
         return new JSPromise<>((resolve, reject) -> new Thread(() -> {
             try {
                 JsonCodec json = new SimpleJsonCodec();
-                Store store = new JsStoreBridge(jsStore); // LIVE — no snapshot, no discard on return
+                Store store = new JsStoreBridge(jsStore); // live, no snapshot
                 HttpClient httpClient = new JsHttpClientBridge(httpSend, json);
 
                 Map<String, ProxyHandler> registry = new HashMap<>();
-                // The "provider handler" a real provider module would supply: forwards the
-                // inbound request upstream via HttpClient.send (the async-bridged call). No
-                // account claiming here — that lives on core-auth's side of the fence.
+                // The provider handler a real provider module would supply: forwards the inbound
+                // request upstream via HttpClient.send (the async-bridged call).
                 registry.put("test", (req, ctx) -> httpClient.send(req));
 
                 RouterOptions opts = baseOptions(store, registry);
@@ -283,8 +271,7 @@ public final class CoreProxyJs {
         return opts;
     }
 
-    // Mirrors shared's RouterTest.testProfile(): a minimal, valid RoutingProfile for a single
-    // synthetic "test" tier/provider — no real Claude/native profile needed for this spike.
+    // A minimal, valid RoutingProfile for a single synthetic "test" tier/provider.
     static RoutingProfile testProfile() {
         RoutingProfile p = new RoutingProfile();
         p.configFile = CONFIG_FILE;

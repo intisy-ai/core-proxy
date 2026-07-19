@@ -17,13 +17,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Ported from {@code proxy/.../ModelMapTest} (Task 6): same scenarios, rewired onto the
- * {@link InMemoryStore} + {@link TestJsonCodec} SPI fakes instead of a temp-dir filesystem.
+ * Exercises {@link ModelMap} over the {@link InMemoryStore} + {@link TestJsonCodec} SPI fakes.
  */
 class ModelMapTest {
 
-    // TEST DATA ONLY (per task-3-brief.md) — not engine logic. A real profile (e.g.
-    // Claude's) supplies its own configFile/tierSourceProvider/tierRegex/tierOrder.
+    // Test data only, not engine logic. A real profile (e.g. Claude's) supplies its own
+    // configFile/tierSourceProvider/tierRegex/tierOrder.
     private static RoutingProfile testProfile() {
         RoutingProfile p = new RoutingProfile();
         p.configFile = "model-map-test.json";

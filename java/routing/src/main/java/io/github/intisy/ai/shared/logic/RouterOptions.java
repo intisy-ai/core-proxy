@@ -12,9 +12,9 @@ import java.util.List;
 import java.util.function.Supplier;
 
 /**
- * Options for {@link Router#route}. Java analog of the old JVM-only {@code ProxyOptions},
- * minus the transport concerns (port/listen) — the caller (server daemon, TeaVM host, test)
- * owns the actual HTTP transport; {@link Router} only resolves a request to a response.
+ * Options for {@link Router#route}, with no transport concerns (port/listen): the caller (server
+ * daemon, TeaVM host, test) owns the actual HTTP transport, while {@link Router} only resolves a
+ * request to a response.
  */
 public class RouterOptions {
     public RoutingProfile profile;
@@ -23,8 +23,8 @@ public class RouterOptions {
     public JsonCodec json;
     public Clock clock;
     public Logger log;
-    /** Callback for user-visible notices (heal/fallback/exhaustion). Not a JSONL file writer —
-     *  the JVM side supplies that behavior via its own {@link Notifier} implementation. */
+    /** Callback for user-visible notices (heal/fallback/exhaustion). Delivery is the caller's job,
+     *  supplied via its own {@link Notifier} implementation. */
     public Notifier notify;
     /** Supplies the provider ids the {@code /v1/models} catalog and model-recovery lookups
      *  should scan (the caller's registered handlers), read fresh on every request. */

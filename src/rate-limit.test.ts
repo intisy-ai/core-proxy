@@ -2,9 +2,8 @@ import { expect, it } from "vitest";
 import { isRateLimited, rateLimitResetMs, rateLimitFinal } from "./rate-limit.js";
 import type { RoutingProfile } from "./types.js";
 
-// Mirrors the real profile's ownership of synthesized headers: it copies the
-// upstream 429's own headers into its output itself (the engine no longer does
-// this overlay), plus its own x-test marker.
+// Mirrors the real profile's ownership of synthesized headers: the engine overlays nothing, so the
+// profile copies the upstream 429's own headers into its output itself, plus its own x-test marker.
 const prof = {
   nativeRateLimit: async ({ resetMs, upstream }: { resetMs: number; upstream: Response | null }) => {
     const headers: Record<string, string> = { "x-test": "1" };
@@ -66,7 +65,7 @@ it("rateLimitFinal: preserves upstream anthropic-ratelimit-* headers only when t
   expect(r2.headers.get("anthropic-ratelimit-unified-status")).toBeNull();
 });
 
-it("rateLimitFinal: returns exactly what the profile synthesizes — the profile's own retry-after wins and it owns copying upstream headers (locking test)", async () => {
+it("rateLimitFinal: returns exactly what the profile synthesizes, the profile's own retry-after wins and it owns copying upstream headers (locking test)", async () => {
   // Stub mirrors the real profile: it copies every upstream header itself, then
   // sets its own retry-after last so it always wins over a raw upstream value.
   const profWithOwnRetryAfter = {
@@ -90,7 +89,7 @@ it("rateLimitFinal: returns exactly what the profile synthesizes — the profile
 
   const r = await rateLimitFinal(upstream429, 1234, profWithOwnRetryAfter);
 
-  // The profile's own retry-after wins — the raw upstream "5" must never clobber it.
+  // The profile's own retry-after wins; the raw upstream "5" must never clobber it.
   expect(r.headers.get("retry-after")).toBe("60");
   // The anthropic-ratelimit-* family, copied by the profile's own stub, is present.
   expect(r.headers.get("anthropic-ratelimit-unified-reset")).toBe("999");

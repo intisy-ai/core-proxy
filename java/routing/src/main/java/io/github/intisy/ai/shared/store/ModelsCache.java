@@ -9,14 +9,11 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Shared model-catalog cache, keyed by provider id. Java analog of
- * {@code libs/core-auth/src/models-cache.ts}, rewired onto the {@link Store} + {@link JsonCodec}
- * SPIs. Unlike {@link AccountStore} this has no cross-process lock — the JS source writes it
- * unlocked too (a full read-modify-write on every call, best effort).
+ * Shared model-catalog cache over the {@link Store} + {@link JsonCodec} SPIs, keyed by provider id.
+ * Unlocked: a full read-modify-write on every call, best effort.
  *
- * <p>On-disk shape (must match the JS store exactly): {@code {"<providerId>": {models, ranking,
- * defaultModelId, source, sorts, sortOrders, scores, scoreSource, fetchedAt}, ...}}, under the
- * key {@code "models.json"}.
+ * <p>On-disk shape, under the key {@code "models.json"}: {@code {"<providerId>": {models, ranking,
+ * defaultModelId, source, sorts, sortOrders, scores, scoreSource, fetchedAt}, ...}}.
  */
 public class ModelsCache {
     private static final String KEY = "models.json";
@@ -29,12 +26,12 @@ public class ModelsCache {
         this.json = json;
     }
 
-    /** Per-provider cache entry. Field order matches the JS {@code writeModelCache} object literal. */
+    /** Per-provider cache entry. */
     public static class Entry {
         public Map<String, Object> models;
         public List<String> ranking;
         public String defaultModelId;
-        public String source;                    // "live" | "static" | "" — fetched-now vs shipped fallback
+        public String source;                    // "live" | "static" | "": fetched-now vs shipped fallback
         public List<Object> sorts;                // [{id, label}, ...], opaque
         public Map<String, List<String>> sortOrders;
         public Map<String, Object> scores;
@@ -49,7 +46,7 @@ public class ModelsCache {
                 Map<String, Object> all = JsonUtil.asMap(json.parse(raw));
                 if (all != null) return all;
             } catch (Exception ignored) {
-                // swallow-all, mirrors the JS readAll's try/catch degrading to an empty cache
+                // degrade to an empty cache on any parse failure
             }
         }
         return new LinkedHashMap<>();
@@ -109,8 +106,7 @@ public class ModelsCache {
     }
 
     /**
-     * Returns the provider's cached entry, or {@code null} if there is none or it has no models
-     * (JS parity: {@code entry && entry.models ? entry : null}).
+     * Returns the provider's cached entry, or {@code null} if there is none or it has no models.
      */
     public Entry read(String providerId) {
         Map<String, Object> m = JsonUtil.asMap(readAllRaw().get(providerId));
@@ -121,7 +117,7 @@ public class ModelsCache {
 
     /**
      * Read-modify-write: merges {@code entry} into the stored map under {@code providerId} and
-     * rewrites the whole document (JS parity: {@code writeModelCache}).
+     * rewrites the whole document.
      */
     public void write(String providerId, Entry entry) {
         Map<String, Object> all = readAllRaw();

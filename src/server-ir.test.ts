@@ -1,8 +1,8 @@
-// SP-3 T1: proves the proxy server's IR front door end to end using core-ir's REAL
-// AnthropicTranslator (not a mock) -- inbound Anthropic wire is decoded to the canonical IR,
-// routed on IrRequest.model, handed to a handleIr-capable handler, and the IrResponse/IR event
-// stream it returns is encoded back to Anthropic wire (JSON body / SSE). A legacy handle()-only
-// handler must keep working unchanged via the fallback, even when the profile has a translator.
+// Proves the proxy server's IR front door end to end using core-ir's real AnthropicTranslator (not
+// a mock): inbound Anthropic wire is decoded to the canonical IR, routed on IrRequest.model, handed
+// to a handleIr-capable handler, and the IrResponse / IR event stream it returns is encoded back to
+// Anthropic wire (JSON body / SSE). A handle()-only handler still serves via the fallback, even when
+// the profile has a translator.
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -67,7 +67,7 @@ it("decodes app wire -> IR, routes, calls handleIr, and encodes the IrResponse b
   expect(r.status).toBe(200);
   const wireBody = await r.text();
   const decoded = await translators.anthropic.decodeResponse(wireBody);
-  expect(decoded.model).toBe("m-ok"); // ctx.model (the ASSIGNED model), matching legacy handle()'s contract
+  expect(decoded.model).toBe("m-ok"); // ctx.model is the assigned model, matching the handle() contract
   expect(decoded.stopReason).toBe("end_turn");
   expect(decoded.content[0]).toMatchObject({ kind: "text", text: "handled via IR: hi there" });
 });
@@ -116,14 +116,14 @@ it("legacy handle()-only handler still serves via the fallback, even though the 
 
   const r = await fetch(`http://127.0.0.1:${port}/v1/messages`, { method: "POST", body: wireRequest });
   expect(r.status).toBe(200);
-  // Untranslated, verbatim legacy body -- proves the "no handleIr" fallback served this request
-  // rather than attempting (and failing) to encode a raw Response through the IR.
+  // Untranslated, verbatim body: proves the "no handleIr" fallback served this request rather than
+  // attempting (and failing) to encode a raw Response through the IR.
   expect(await r.text()).toBe("served m-legacy");
 });
 
-// T3c-1: a thrown HandleIrError must reconstruct a real Response and flow through the SAME
-// isRateLimited/rateLimitResetMs/fallback/final-429-synthesis logic as a legacy handle() response,
-// instead of collapsing to a flat 502 (which lost status fidelity and broke rate-limit fallback).
+// A thrown HandleIrError must reconstruct a real Response and flow through the same isRateLimited/
+// rateLimitResetMs/fallback/final-429-synthesis logic as a wire handle() response, instead of
+// collapsing to a flat 502 (which loses status fidelity and breaks rate-limit fallback).
 it("handleIr throwing a 429-typed HandleIrError triggers fallback, then synthesizes a final 429 once every entry is exhausted", async () => {
   writeFileSync(
     join(dir, "config", "claude-code-loader.json"),
@@ -144,8 +144,8 @@ it("handleIr throwing a 429-typed HandleIrError triggers fallback, then synthesi
 
   const r = await fetch(`http://127.0.0.1:${port}/v1/messages`, { method: "POST", body: wireRequest });
   expect(r.status).toBe(429);
-  // Body comes from profile.nativeRateLimit's final synthesis -- proves the fallback + final-429
-  // path ran, not the flat 502 error shape.
+  // Body comes from profile.nativeRateLimit's final synthesis: proves the fallback + final-429 path
+  // ran, not the flat 502 error shape.
   const body = await r.json();
   expect(body.error.type).toBe("rate_limit_error");
 });
@@ -195,9 +195,9 @@ it("handleIr throwing a plain non-typed error still collapses to a flat 502, unc
   expect(body.error.type).toBe("loader_proxy_error");
 });
 
-// T3c-4: providers are esbuild-bundled independently, so a deployed provider throws its OWN inlined
-// copy of HandleIrError -- `instanceof` against the front-door's copy would be false. The front-door
-// must recognize the typed error by its stable `name` marker + transport shape, NOT by class identity,
+// Providers are esbuild-bundled independently, so a deployed provider throws its own inlined copy of
+// HandleIrError and `instanceof` against the front-door's copy would be false. The front-door must
+// recognize the typed error by its stable `name` marker plus transport shape, not by class identity,
 // or the 429 fallback silently breaks in production. This simulates the foreign-copy throw.
 it("recognizes a foreign-bundle HandleIrError (marker-shaped, not instanceof) and still falls back", async () => {
   writeFileSync(

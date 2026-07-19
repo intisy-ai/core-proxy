@@ -17,31 +17,28 @@ import java.util.regex.Matcher;
 
 /**
  * Shared tier -&gt; provider-model resolution engine, parameterized entirely by a
- * {@link RoutingProfile} (no hardcoded tier/config/env literals). Java port of
- * {@code libs/core-proxy/src/model-map.ts}, used by the proxy (routing), a Providers-style
- * display, and the wrapper (model env injection).
+ * {@link RoutingProfile} (no hardcoded tier/config/env literals). Reads through the {@link Store} +
+ * {@link JsonCodec} SPIs: {@link #readModelMap} reads the store key {@code profile.configFile}, and
+ * {@link #catalogEntries} reads the shared, Store-backed {@link ModelsCache}. Used by the proxy
+ * (routing), a Providers-style display, and the wrapper (model env injection).
  *
- * <p>Rewired onto the {@link Store} + {@link JsonCodec} SPIs (no gson/nio): {@link #readModelMap}
- * reads the store key {@code profile.configFile} directly, and {@link #catalogEntries} reads
- * the shared, Store-backed {@link ModelsCache} instead of the old nio-based one.
- *
- * <p>Self-heals: a stored mapping whose model no longer exists in the live catalog (e.g.
- * after a model refresh) is auto-re-derived to the current best model for that tier
- * WITHIN the provider the user chose, so the mapping tracks the app's models without the
- * user re-assigning, and never silently crosses to a different provider. Only a tier with
- * NO stored choice at all derives from the whole catalog.
+ * <p>Self-heals: a stored mapping whose model no longer exists in the live catalog (e.g. after a
+ * model refresh) is auto-re-derived to the current best model for that tier within the provider the
+ * user chose, so the mapping tracks the app's models without the user re-assigning, and never
+ * silently crosses to a different provider. Only a tier with no stored choice at all derives from
+ * the whole catalog.
  */
 public final class ModelMap {
 
-    // core-auth writes the live per-provider catalog here on login / "Refresh models";
-    // the legacy name is read as a fallback only (pre-rename).
+    // core-auth writes the live per-provider catalog under "models.json"; the second key is read as
+    // a fallback.
     private static final String[] MODEL_CACHE_KEYS = {"models.json", "core-auth-models.json"};
 
     private ModelMap() {
     }
 
-    /** A {key,value} env pair. Kept as two plain fields, not a pre-joined line, since
-     *  values (display names) can contain spaces/parens that the caller must quote per shell. */
+    /** A {key,value} env pair. Kept as two plain fields, not a pre-joined line, since values
+     *  (display names) can contain spaces/parens that the caller must quote per shell. */
     public static class KV {
         public final String key;
         public final String value;
@@ -60,11 +57,10 @@ public final class ModelMap {
     // -- tiers --------------------------------------------------------------------
 
     /**
-     * Tiers are DETECTED from the tier-source provider's catalog (family token of each
-     * model id, via {@code profile.tierRegex}, e.g. {@code claude-fable-5 -> "fable"}), so
-     * new families appear as mapping slots automatically. {@code profile.tierOrder} keeps
-     * known families in a familiar order; {@code profile.tierFallback} covers pre-login (no
-     * catalog yet). Java port of the JS {@code claudeTiers}, renamed generically.
+     * Tiers are detected from the tier-source provider's catalog (family token of each model id, via
+     * {@code profile.tierRegex}, e.g. {@code claude-fable-5 -> "fable"}), so new families appear as
+     * mapping slots automatically. {@code profile.tierOrder} keeps known families in a familiar
+     * order; {@code profile.tierFallback} covers pre-login (no catalog yet).
      */
     public static List<String> resolveTiers(Store store, JsonCodec json, RoutingProfile p) {
         ModelsCache cache = new ModelsCache(store, json);
@@ -97,7 +93,7 @@ public final class ModelMap {
     // -- stored map --------------------------------------------------------------
 
     /** Reads the store key {@code p.configFile}'s {@code modelMap} object, or {} on any
-     *  absence/parse failure. Java port of the JS {@code readModelMap}. */
+     *  absence/parse failure. */
     @SuppressWarnings("unchecked")
     public static Map<String, Object> readModelMap(Store store, JsonCodec json, RoutingProfile p) {
         try {
@@ -110,7 +106,7 @@ public final class ModelMap {
                 }
             }
         } catch (Exception ignored) {
-            // swallow-all, mirrors the JS readModelMap's try/catch degrading to {}
+            // degrade to {} on any parse failure
         }
         return new LinkedHashMap<>();
     }
@@ -118,17 +114,9 @@ public final class ModelMap {
     // -- catalog --------------------------------------------------------------
 
     /**
-     * Live catalog for the given provider ids, read from the shared {@link ModelsCache}
-     * (store key {@code models.json}), preferring each provider's ranking (best first) when
-     * core-auth computed one, else catalog order.
-     *
-     * <p>Seam note: the JS original ({@code catalogEntries(configDir)}, no provider-id
-     * argument) additionally scanned {@code repos/*}/package.json for each locally deployed
-     * plugin's declared {@code authProviders}, and fell back to a package's bundled STATIC
-     * model list when core-auth had not fetched a live catalog yet. This library has no
-     * {@code repos/} layout, so the provider set is supplied by the caller and there is no
-     * bundled static fallback — a provider with no cached models is simply skipped, matching
-     * the JS behavior for a provider with neither a cache entry nor a static list.
+     * Live catalog for the given provider ids, read from the shared {@link ModelsCache} (store key
+     * {@code models.json}), preferring each provider's ranking (best first) when core-auth computed
+     * one, else catalog order. A provider with no cached models is skipped.
      */
     public static List<CatalogEntry> catalogEntries(Store store, JsonCodec json, List<String> providerIds) {
         List<CatalogEntry> out = new ArrayList<>();
@@ -168,10 +156,9 @@ public final class ModelMap {
         return out;
     }
 
-    // All provider ids present in the models cache store entry, used internally by
-    // resolveModelMap to build its catalog without requiring a caller-supplied provider
-    // list — the practical equivalent of the JS repos-scan universe is "every provider
-    // core-auth has ever fetched a catalog for".
+    // All provider ids present in the models cache, used internally by resolveModelMap to build its
+    // catalog without a caller-supplied provider list: every provider core-auth has fetched a catalog
+    // for.
     private static List<String> cachedProviderIds(Store store, JsonCodec json) {
         for (String key : MODEL_CACHE_KEYS) {
             try {
@@ -187,7 +174,7 @@ public final class ModelMap {
                     }
                 }
             } catch (Exception ignored) {
-                // swallow-all; try the next legacy key
+                // try the next key
             }
         }
         return Collections.emptyList();
@@ -196,10 +183,9 @@ public final class ModelMap {
     // -- chain normalization --------------------------------------------------
 
     /**
-     * Normalize a stored slot value into an ordered chain: legacy single {provider,model}
-     * -&gt; [obj]; a list stays a list; anything else -&gt; []. First entry is the primary,
-     * the rest are ordered fallbacks. Entries missing provider/model are filtered out. Java
-     * port of the JS {@code normalizeChain}.
+     * Normalize a stored slot value into an ordered chain: a single {provider,model} becomes [obj]; a
+     * list stays a list; anything else becomes []. First entry is the primary, the rest are ordered
+     * fallbacks. Entries missing provider/model are filtered out.
      */
     public static List<Assignment> normalizeChain(Object raw) {
         List<Assignment> out = new ArrayList<>();
@@ -245,14 +231,12 @@ public final class ModelMap {
     // -- heal/derive --------------------------------------------------------------
 
     /**
-     * Effective tier -&gt; ORDERED CHAIN of {provider, model, name, derived}. Each stored
-     * entry is kept while its model still exists in the catalog; a fully stale tier heals
-     * ONLY within the provider the user chose — never silently to a different provider (an
-     * Opus-&gt;antigravity mapping must not become the tier-source provider). When the
-     * chosen provider has no catalog at all, the stored entry passes through untouched.
-     * Only a tier with NO stored choice derives from the whole catalog. "-auto" ids are
-     * skipped. Faithful port of the JS {@code resolveModelMap}; a {@code default} key is
-     * always present.
+     * Effective tier -&gt; ordered chain of {provider, model, name, derived}. Each stored entry is
+     * kept while its model still exists in the catalog; a fully stale tier heals only within the
+     * provider the user chose, never silently to a different provider (an Opus-&gt;antigravity mapping
+     * must not become the tier-source provider). When the chosen provider has no catalog at all, the
+     * stored entry passes through untouched. Only a tier with no stored choice derives from the whole
+     * catalog. "-auto" ids are skipped. A {@code default} key is always present.
      */
     public static Map<String, List<Assignment>> resolveModelMap(Store store, JsonCodec json, RoutingProfile p) {
         Map<String, Object> stored = readModelMap(store, json, p);
@@ -342,9 +326,9 @@ public final class ModelMap {
         }
         if (!out.isEmpty()) return out;
 
-        // Whole chain stale — heal WITHIN the chosen provider (only its model id changed);
-        // cross-provider derivation is reserved for unset tiers, preferring the
-        // tier-source provider (the app's own models are the natural default).
+        // Whole chain stale: heal within the chosen provider (only its model id changed);
+        // cross-provider derivation is reserved for unset tiers, preferring the tier-source provider
+        // (the app's own models are the natural default).
         String preferred = chain.isEmpty() ? null : chain.get(0).provider;
         if (preferred != null) {
             CatalogEntry d = deriveIn(byProvider(catalog, preferred), keyword);
@@ -362,9 +346,8 @@ public final class ModelMap {
     // -- env pairs --------------------------------------------------------------
 
     /**
-     * {key,value} env pairs the wrapper exports so the app's /model shows the mapped
-     * models as custom tier entries (real names via *_NAME) and uses the default tier as
-     * the session default. Java port of the JS {@code modelEnvPairs}.
+     * {key,value} env pairs the wrapper exports so the app's /model shows the mapped models as custom
+     * tier entries (real names via *_NAME) and uses the default tier as the session default.
      */
     public static List<KV> modelEnvPairs(Store store, JsonCodec json, RoutingProfile p) {
         Map<String, List<Assignment>> eff = resolveModelMap(store, json, p);

@@ -8,14 +8,10 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Rate-limit detection, reset-time computation, and native-shaped 429 synthesis.
- * Java port of {@code libs/core-proxy/src/rate-limit.ts} (post-refactor: the engine
- * has no app-specific header names -- {@link #rateLimitFinal} delegates entirely to
- * {@link RoutingProfile#nativeRateLimit} and returns its result verbatim).
- *
- * <p>Operates on the SPI {@link HttpResponse} (a plain {@code String} body) instead of
- * the old byte[]-bodied {@code AiResponse} -- the body is passed straight through with
- * no encoding/decoding.
+ * Rate-limit detection, reset-time computation, and native-shaped 429 synthesis. The engine has no
+ * app-specific header names: {@link #rateLimitFinal} delegates entirely to
+ * {@link RoutingProfile#nativeRateLimit} and returns its result verbatim. Operates on the SPI
+ * {@link HttpResponse} (a plain {@code String} body passed straight through, no encoding/decoding).
  */
 public final class RateLimit {
 
@@ -39,11 +35,10 @@ public final class RateLimit {
     }
 
     /**
-     * Final response when every model in a chain is rate-limited. Delegates the actual
-     * native-shaped 429 (status/headers/body) entirely to {@code profile.nativeRateLimit} --
-     * each routing profile knows its own upstream's rate-limit header conventions and error
-     * format. The profile is the SOLE owner of the synthesized headers; this engine does not
-     * overlay anything on top of what the profile returns.
+     * Final response when every model in a chain is rate-limited. Delegates the native-shaped 429
+     * (status/headers/body) entirely to {@code profile.nativeRateLimit}, which owns its upstream's
+     * rate-limit header conventions and error format. The profile is the sole owner of the
+     * synthesized headers; this engine overlays nothing on top of what the profile returns.
      */
     public static HttpResponse rateLimitFinal(HttpResponse lastResp, long resetMs, RoutingProfile profile) {
         RoutingProfile.Synth s = profile.nativeRateLimit.build(new RateLimitInfo(resetMs, lastResp));
@@ -66,9 +61,9 @@ public final class RateLimit {
         return null;
     }
 
-    // Mirrors JS parseInt(str, 10): parses an optional sign followed by a leading run of
-    // digits and ignores trailing garbage; returns 0 (the JS NaN case, per the callers'
-    // `> 0` guard) when no digits are present or the header is absent.
+    // Parses an optional sign followed by a leading run of digits and ignores trailing garbage;
+    // returns 0 (which the callers' `> 0` guard treats as absent) when no digits are present or the
+    // header is absent.
     private static int parseIntLenient(String s) {
         if (s == null) return 0;
         s = s.trim();

@@ -5,9 +5,8 @@ import io.github.intisy.ai.shared.spi.Store;
 
 /**
  * Context passed to a {@link ProxyHandler} for a single request. {@code store} is the server's
- * injected key/value store; a provider must serve from it rather than self-assembling its own
- * (see the store-threading design). It is {@code null} only for a store-less/legacy host, where a
- * provider may fall back to its own store.
+ * injected key/value store; a provider must serve from it rather than self-assembling its own. It is
+ * {@code null} only for a store-less host, where a provider may fall back to its own store.
  */
 public class HandlerCtx {
     public String configDir;

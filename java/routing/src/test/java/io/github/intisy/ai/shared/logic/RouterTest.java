@@ -21,16 +21,15 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * PURE routing test for {@link Router#route} (Task 6): calls the engine directly, no socket,
- * no {@code HttpServer} — same scenarios as the old {@code ProxyServerTest} integration test,
- * with a fake {@link HandlerResolver} ({@code rl} always rate-limited, {@code ok} always
- * serves) and an in-memory {@code Store}.
+ * Pure routing test for {@link Router#route}: calls the engine directly, no socket, no
+ * {@code HttpServer}, with a fake {@link HandlerResolver} ({@code rl} always rate-limited, {@code ok}
+ * always serves) and an in-memory {@code Store}.
  */
 class RouterTest {
 
     private static final String CONFIG_FILE = "router-test.json";
 
-    // TEST DATA ONLY — a real profile (e.g. Claude's) supplies its own tierOrder/nativeRateLimit.
+    // Test data only; a real profile (e.g. Claude's) supplies its own tierOrder/nativeRateLimit.
     private static RoutingProfile testProfile() {
         RoutingProfile p = new RoutingProfile();
         p.configFile = CONFIG_FILE;
@@ -195,10 +194,10 @@ class RouterTest {
 
     @Test
     void modelsEndpoint_listsCatalogWithFallbackLimits() {
-        // Raw core.ModelsCache fixture ("models.json"), keyed by provider id — see
-        // ModelMap.catalogEntries for the shape it reads ({provider: {models, ranking}}).
-        // No "limit" on the entry -> modelInfo must fall back to profile.defaultContext/
-        // defaultOutput (200000 / 64000, see testProfile()).
+        // Raw ModelsCache fixture ("models.json"), keyed by provider id; see ModelMap.catalogEntries
+        // for the shape it reads ({provider: {models, ranking}}). No "limit" on the entry means
+        // modelInfo must fall back to profile.defaultContext/defaultOutput (200000 / 64000, see
+        // testProfile()).
         InMemoryStore store = new InMemoryStore();
         store.put("models.json", "{\"ok\":{\"models\":{\"m-ok\":{\"name\":\"M Ok\"}},\"ranking\":[\"m-ok\"]}}");
         RouterOptions opts = baseOptions(store);

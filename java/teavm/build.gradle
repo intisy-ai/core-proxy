@@ -6,7 +6,7 @@ plugins {
 }
 
 dependencies {
-    // teavm transpiles :routing's pure logic — no gson/net/nio/etc, matching :routing's own
+    // teavm transpiles :routing's pure logic (no gson/net/nio/etc), matching :routing's own
     // zero-dependency policy (Router/ModelMap already avoid java.net/nio for exactly this reason).
     implementation project(":routing")
     teavm teavm.libs.jsoApis
@@ -15,7 +15,7 @@ dependencies {
 // The root subprojects{} block pins Java 8 (sourceCompatibility/targetCompatibility +
 // compileJava --release 8) for portability of :routing. TeaVM 0.15.0's own classlib/jso-apis/
 // extension-spi artifacts publish a minimum JVM-version metadata of 11-17, so :teavm needs a
-// newer compile target than :routing — override both the extension's compatibility (fixes
+// newer compile target than :routing, overriding both the extension's compatibility (fixes
 // Gradle's dependency-resolution JVM-version attribute matching) and the compileJava task's
 // --release option (which the root block sets via tasks.matching{}.configureEach{}, applied
 // before this script runs, last-registered-wins). Mirrors ai-java's js/build.gradle exactly.

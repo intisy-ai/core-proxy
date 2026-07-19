@@ -7,10 +7,8 @@ import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
- * Describes how to route/tier-map a provider's native model catalog, and how to
- * synthesize a native-shaped rate-limit response for that provider.
- *
- * Java analog of the JS routing profile shape (see {@code libs/core-proxy/src/types.ts}).
+ * Describes how to route/tier-map a provider's native model catalog, and how to synthesize a
+ * native-shaped rate-limit response for that provider.
  */
 public class RoutingProfile {
     public String configFile;
@@ -25,12 +23,10 @@ public class RoutingProfile {
     public NativeRateLimit nativeRateLimit;
     public Pattern nativeModelPattern;
     /**
-     * SP-3: the app&lt;-&gt;IR translator for this profile (e.g. {@code AnthropicTranslator} for
-     * Claude Code / OpenCode, both of which speak the Anthropic wire format). {@code null} means
-     * this profile has no IR front-door yet — {@link io.github.intisy.ai.shared.logic.Router}
-     * then uses ONLY the legacy {@link ProxyHandler#handle} path, so an existing profile that
-     * never sets this field keeps working unchanged (additive/coexist, per the canonical IR
-     * design's incremental sequencing).
+     * The app&lt;-&gt;IR translator for this profile (e.g. {@code AnthropicTranslator} for Claude Code
+     * and OpenCode, which both speak the Anthropic wire format). {@code null} means this profile has
+     * no IR front-door: {@link io.github.intisy.ai.shared.logic.Router} then uses only the
+     * {@link ProxyHandler#handle} path.
      */
     public Translator translator;
 
@@ -49,7 +45,7 @@ public class RoutingProfile {
         public String body;
     }
 
-    /** Shallow copy — sufficient for producing an invalid variant to validate against. */
+    /** Shallow copy, sufficient for producing an invalid variant to validate against. */
     public RoutingProfile copy() {
         RoutingProfile c = new RoutingProfile();
         c.configFile = configFile;
@@ -68,10 +64,9 @@ public class RoutingProfile {
     }
 
     /**
-     * Mirrors the JS {@code isValidProfile}: configFile non-null & non-empty,
-     * routingKey/tierSourceProvider non-null strings, tierOrder/tierFallback non-null
-     * lists, tierRegex non-null, envPrefix non-null string, nativeRateLimit non-null
-     * (defaultContext/defaultOutput are primitive ints — their presence is implicit).
+     * Valid when: configFile non-null and non-empty, routingKey/tierSourceProvider non-null strings,
+     * tierOrder/tierFallback non-null lists, tierRegex non-null, envPrefix non-null string,
+     * nativeRateLimit non-null (defaultContext/defaultOutput are primitive ints, always present).
      */
     public static boolean isValid(RoutingProfile p) {
         return p != null

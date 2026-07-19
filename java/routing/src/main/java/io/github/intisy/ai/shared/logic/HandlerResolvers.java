@@ -10,10 +10,8 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 /**
- * Factory methods for creating {@link HandlerResolver} implementations.
- * Java analog of {@code libs/core-proxy/src/handler-resolver.ts} (makeDynamicResolver),
- * but using a registry pattern instead of dynamic import (since Java providers are
- * compiled classes, not dynamic modules).
+ * Factory methods for creating {@link HandlerResolver} implementations. Java providers are compiled
+ * classes rather than dynamically imported modules, so resolution is a registry lookup.
  */
 public final class HandlerResolvers {
 
@@ -28,7 +26,6 @@ public final class HandlerResolvers {
      * @return a resolver that looks up handlers by name
      */
     public static HandlerResolver fromRegistry(Map<String, ProxyHandler> registry) {
-        // Defensive copy: copy the map so later external mutations don't leak in
         Map<String, ProxyHandler> copy = new HashMap<>(registry);
         return new HandlerResolver() {
             @Override
@@ -61,8 +58,8 @@ public final class HandlerResolvers {
     /**
      * Adapts a list of {@link Provider} SPI instances (JVM: discovered via
      * {@code ServiceLoader.load(Provider.class)}; TeaVM: instantiated directly by the JS host)
-     * into a {@link HandlerResolver}, keyed by each provider's own {@link Provider#id()} — no
-     * separate registration map needed since a {@code Provider} already carries its id.
+     * into a {@link HandlerResolver}, keyed by each provider's own {@link Provider#id()}, so no
+     * separate registration map is needed since a {@code Provider} already carries its id.
      * Last-registered-wins on a duplicate id, consistent with {@link #fromRegistry}'s plain
      * {@code Map.put} semantics.
      *

@@ -21,13 +21,9 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Pure routing engine: resolves a single {@link HttpRequest} to an {@link HttpResponse} by
- * walking the tier's {provider, model} fallback chain, with no transport/socket concerns —
- * the caller (a JVM daemon, a TeaVM/browser host, or a test) owns the actual HTTP plumbing.
- *
- * <p>Java port of the routing half of {@code libs/core-proxy/src/server.ts} /
- * the old JVM {@code ProxyServerImpl.route}, minus the {@code HttpServer}/{@code HttpExchange}
- * adapter (now the caller's problem, not this engine's).
+ * Pure routing engine: resolves a single {@link HttpRequest} to an {@link HttpResponse} by walking
+ * the tier's {provider, model} fallback chain, with no transport/socket concerns. The caller (a JVM
+ * daemon, a TeaVM/browser host, or a test) owns the actual HTTP plumbing.
  */
 public final class Router {
 
@@ -41,11 +37,10 @@ public final class Router {
         if ("/health".equals(path)) return textResponse(200, "ok");
         if ("/v1/models".equals(path) || path.startsWith("/v1/models/")) return modelsResponse(path, opts);
 
-        // SP-3 front-door: decode the inbound app-wire body into the canonical IR exactly once,
-        // when this profile has a translator (anthropicProfile/opencodeProfile do; a profile that
-        // never sets one stays on the legacy path below, unchanged). A decode failure (malformed
-        // body, or a translator that cannot parse it) also falls back to the legacy path rather
-        // than failing the request -- this is additive, never a hard requirement.
+        // Decode the inbound app-wire body into the canonical IR exactly once, when this profile has
+        // a translator. A profile that never sets one stays on the wire handle() path below. A decode
+        // failure (malformed body, or a translator that cannot parse it) also falls back to the wire
+        // path rather than failing the request.
         IrRequest ir = decodeIr(req, opts);
 
         List<Assignment> chain = ir != null ? resolveAssignmentForModel(ir.model, opts) : resolveAssignment(req, opts);
@@ -53,16 +48,16 @@ public final class Router {
             return errorResponse(503, "No provider/model assigned for this tier. Run cc auth -> Providers.", opts.json);
         }
 
-        // The user must SEE substitutions: a healed primary means the stored mapping no
-        // longer matched the catalog and routing re-derived it.
+        // The user must see substitutions: a healed primary means the stored mapping no longer
+        // matched the catalog and routing re-derived it.
         Assignment primary = chain.get(0);
         if (primary.derived) {
             notify(opts, "Model mapping healed: serving " + primary.provider + " · " + displayName(primary)
                     + " (the stored model for this tier is no longer in the catalog).", "info");
         }
 
-        // Try the tier's models in order; advance to the next only when one is rate-limited,
-        // so a chain stops only once EVERY model in it is exhausted.
+        // Try the tier's models in order; advance to the next only when one is rate-limited, so a
+        // chain stops only once every model in it is exhausted.
         HttpResponse lastResp = null;
         long resetMs = 0;
         for (int i = 0; i < chain.size(); i++) {
@@ -81,24 +76,21 @@ public final class Router {
             HandlerCtx ctx = new HandlerCtx(opts.configDir, opts.store, opts.log, assigned.model);
             HttpResponse resp = null;
             boolean handled = false;
-            // Prefer the IR path when both sides support it: this profile decoded an IR request
-            // AND the resolved handler is a Provider that overrides handleIr. A legacy-only
-            // Provider throws UnsupportedOperationException (Provider's default) -- caught below
-            // and treated as "no IR path here", falling through to the ORIGINAL handle() call so
-            // nothing breaks mid-migration (coexist-then-remove).
+            // Prefer the IR path when both sides support it: this profile decoded an IR request and
+            // the resolved handler is a Provider that overrides handleIr. A Provider that only
+            // implements handle() throws UnsupportedOperationException (Provider's default), caught
+            // below and treated as "no IR path here", falling through to the handle() call.
             if (ir != null && handler instanceof Provider) {
                 try {
                     IrResponse irResp = ((Provider) handler).handleIr(ir, ctx);
                     resp = wireResponse(opts.profile.translator.encodeResponse(irResp));
                     handled = true;
                 } catch (UnsupportedOperationException notIrCapable) {
-                    // fall through to the legacy handle() call below
+                    // fall through to the handle() call below
                 } catch (HandleIrException hie) {
-                    // A typed transport error carries the provider's real HTTP status/headers/
-                    // body -- reconstruct it as an HttpResponse so it flows through the SAME
-                    // RateLimit.isRateLimited/fallback logic below as a legacy handle() response
-                    // would, restoring status fidelity (e.g. 429 fallback, verbatim 400) on the
-                    // IR path.
+                    // A typed transport error carries the provider's real HTTP status/headers/body:
+                    // reconstruct it as an HttpResponse so it flows through the same
+                    // RateLimit.isRateLimited/fallback logic below (e.g. 429 fallback, verbatim 400).
                     resp = new HttpResponse();
                     resp.status = hie.status;
                     Map<String, String> headers = hie.headers != null ? new LinkedHashMap<>(hie.headers) : new LinkedHashMap<>();
@@ -109,7 +101,7 @@ public final class Router {
                     resp.body = hie.body;
                     handled = true;
                 } catch (Exception e) {
-                    // Unexpected/non-typed throw -- a genuine bug, not a modeled transport outcome.
+                    // Unexpected throw: a genuine bug, not a modeled transport outcome.
                     log(opts, "handleIr error for " + assigned.provider + ": " + e.getMessage());
                     lastResp = errorResponse(502, "Provider handler failed: " + e.getMessage(), opts.json);
                     continue;
@@ -128,20 +120,20 @@ public final class Router {
             if (RateLimit.isRateLimited(resp)) {
                 long ms = RateLimit.rateLimitResetMs(resp, opts.clock.now());
                 if (ms > resetMs) resetMs = ms;
-                log(opts, "rate-limited on " + assigned.provider + "/" + assigned.model + " — trying next fallback");
+                log(opts, "rate-limited on " + assigned.provider + "/" + assigned.model + ", trying next fallback");
                 continue;
             }
             // Never switch the user silently: announce when a fallback (not the primary) served.
             if (i > 0) {
                 notify(opts, displayName(primary) + " rate-limited → served by " + displayName(assigned), null);
             }
-            return resp; // success or a non-rate-limit error — surface it
+            return resp; // success or a non-rate-limit error, surface it
         }
 
-        // Every model in the chain was rate-limited (or unavailable) — hand back a native
-        // 429 so the client renders its own rate-limit UI, consistent across providers.
+        // Every model in the chain was rate-limited (or unavailable): hand back a native 429 so the
+        // client renders its own rate-limit UI, consistent across providers.
         if ((lastResp != null && lastResp.status == 429) || resetMs > opts.clock.now()) {
-            notify(opts, "All mapped models for this tier are rate-limited — request rejected with the earliest reset time.", null);
+            notify(opts, "All mapped models for this tier are rate-limited, request rejected with the earliest reset time.", null);
             return RateLimit.rateLimitFinal(lastResp, resetMs, opts.profile);
         }
         return lastResp != null ? lastResp : errorResponse(503, "No provider handler available for this tier.", opts.json);
@@ -159,9 +151,8 @@ public final class Router {
         return a.name != null && !a.name.isEmpty() ? a.name : a.model;
     }
 
-    // Case-insensitive header presence check, mirroring JS Headers.has()'s case-insensitivity --
-    // used so injecting the retryAfterMs hint never duplicates a header the thrower already set
-    // under different casing.
+    // Case-insensitive header presence check, mirroring JS Headers.has(): injecting the retryAfterMs
+    // hint never duplicates a header the thrower already set under different casing.
     private static boolean hasHeaderIgnoreCase(Map<String, String> headers, String name) {
         for (String key : headers.keySet()) {
             if (key != null && key.equalsIgnoreCase(name)) return true;
@@ -169,24 +160,23 @@ public final class Router {
         return false;
     }
 
-    // The ORDERED CHAIN [{provider, model}, ...] assigned to the request's tier (primary +
-    // fallbacks). Healed: stale/unset tiers auto-derive to the current catalog, so routing
-    // tracks a model refresh even if never re-assigned.
+    // The ordered chain [{provider, model}, ...] assigned to the request's tier (primary +
+    // fallbacks). Stale/unset tiers auto-derive to the current catalog, so routing tracks a model
+    // refresh even if never re-assigned.
     private static List<Assignment> resolveAssignment(HttpRequest req, RouterOptions opts) {
         return resolveAssignmentForModel(requestedModel(req, opts.json), opts);
     }
 
-    // SP-3: same tier/model-map resolution as resolveAssignment above, but the requested model is
-    // supplied directly instead of being parsed out of the raw wire body -- the IR path (route())
-    // already decoded the body into an IrRequest and reads IrRequest.model, the neutral field name
-    // shared by every vendor's IR, instead of re-parsing vendor-specific wire JSON here.
+    // Same tier/model-map resolution as resolveAssignment, but the requested model is supplied
+    // directly: the IR path already decoded the body into an IrRequest and reads IrRequest.model, the
+    // neutral field name shared by every vendor's IR, rather than re-parsing vendor-specific wire JSON.
     private static List<Assignment> resolveAssignmentForModel(String requestedRaw, RouterOptions opts) {
         String requested = requestedRaw == null ? "" : requestedRaw;
         Map<String, List<Assignment>> map = ModelMap.resolveModelMap(opts.store, opts.json, opts.profile);
 
-        // Exact-id match first: the wrapper injects each tier's primary model id as an env
-        // var, so the request model can be a backend id carrying no tier keyword — recover
-        // its tier by matching the assigned ids before keyword classification.
+        // Exact-id match first: the wrapper injects each tier's primary model id as an env var, so the
+        // request model can be a backend id carrying no tier keyword; recover its tier by matching the
+        // assigned ids before keyword classification.
         if (!requested.isEmpty()) {
             for (List<Assignment> chain : map.values()) {
                 for (Assignment a : chain) {
@@ -197,9 +187,9 @@ public final class Router {
 
         String slot = slotForModel(requested, map);
         if ("default".equals(slot) && !requested.isEmpty()) {
-            // A model picked DIRECTLY (e.g. via /model) that isn't in any tier chain must be
-            // served as itself when a provider offers it — falling through to the default
-            // tier would silently substitute a different model.
+            // A model picked directly (e.g. via /model) that isn't in any tier chain must be served as
+            // itself when a provider offers it; falling through to the default tier would silently
+            // substitute a different model.
             List<CatalogEntry> catalog = ModelMap.catalogEntries(opts.store, opts.json, opts.listProviders.get());
             CatalogEntry found = null;
             for (CatalogEntry e : catalog) {
@@ -216,7 +206,7 @@ public final class Router {
             boolean matchesNative = opts.profile.nativeModelPattern != null
                     && opts.profile.nativeModelPattern.matcher(requested).find();
             if (!matchesNative) {
-                notify(opts, "Requested model '" + requested + "' is not in any provider catalog — serving the Default tier instead.", null);
+                notify(opts, "Requested model '" + requested + "' is not in any provider catalog, serving the Default tier instead.", null);
             }
         }
 
@@ -226,8 +216,8 @@ public final class Router {
         return dflt != null ? dflt : new ArrayList<>();
     }
 
-    // Classify a requested model into a mapping slot by tier keyword. Slots come from the
-    // resolved map (detected families incl. new ones) — nothing hardcoded here.
+    // Classify a requested model into a mapping slot by tier keyword. Slots come from the resolved map
+    // (detected families incl. new ones), nothing hardcoded here.
     private static String slotForModel(String model, Map<String, List<Assignment>> map) {
         String m = model == null ? "" : model.toLowerCase(Locale.ROOT);
         for (String slot : map.keySet()) {
@@ -245,29 +235,29 @@ public final class Router {
                 if (m instanceof String) return (String) m;
             }
         } catch (Exception ignored) {
-            // malformed/non-JSON body — treat as no requested model, mirrors the JS try/catch
+            // malformed/non-JSON body: treat as no requested model
         }
         return "";
     }
 
-    // -- SP-3 IR front-door -----------------------------------------------------
+    // -- IR front-door -----------------------------------------------------------
 
-    // Decodes the inbound app-wire body into the canonical IR via this profile's translator, when
-    // one is configured. Returns null (never throws) when there is no translator, no body, or the
-    // decode itself fails -- any of those means "use the legacy path", not "fail the request".
+    // Decodes the inbound app-wire body into the canonical IR via this profile's translator, when one
+    // is configured. Returns null (never throws) when there is no translator, no body, or the decode
+    // fails: any of those means use the wire path, not fail the request.
     private static IrRequest decodeIr(HttpRequest req, RouterOptions opts) {
         if (opts.profile.translator == null || req.body == null || req.body.isEmpty()) return null;
         try {
             return opts.profile.translator.decodeRequest(req.body);
         } catch (Exception e) {
-            log(opts, "IR decode failed, falling back to legacy routing: " + e.getMessage());
+            log(opts, "IR decode failed, falling back to wire routing: " + e.getMessage());
             return null;
         }
     }
 
     // Wraps an already-encoded app-wire JSON string (this profile's translator's encodeResponse
-    // output) into an HttpResponse, matching the shape jsonResponse() below would produce for the
-    // legacy path (so downstream rate-limit/response handling in route() treats both identically).
+    // output) into an HttpResponse, matching the shape jsonResponse() produces for the wire path so
+    // downstream rate-limit/response handling in route() treats both identically.
     private static HttpResponse wireResponse(String wireJson) {
         HttpResponse resp = new HttpResponse();
         resp.status = 200;
@@ -280,10 +270,9 @@ public final class Router {
 
     // -- /v1/models catalog ---------------------------------------------------
 
-    // Claude Code (and similarly-shaped clients) validate their custom default-model ids
-    // against /v1/models. Provider-mapped ids don't exist upstream, so forwarding a 404
-    // would show the model picker stuck loading. Serve the loader's own catalog instead —
-    // every mapped id resolves.
+    // Claude Code (and similarly-shaped clients) validate their custom default-model ids against
+    // /v1/models. Provider-mapped ids don't exist upstream, so forwarding a 404 would show the model
+    // picker stuck loading. Serve the loader's own catalog instead, where every mapped id resolves.
     private static HttpResponse modelsResponse(String path, RouterOptions opts) {
         List<CatalogEntry> raw = ModelMap.catalogEntries(opts.store, opts.json, opts.listProviders.get());
         List<CatalogEntry> entries = new ArrayList<>();
@@ -291,9 +280,9 @@ public final class Router {
             if (!e.model.endsWith("-auto")) entries.add(e);
         }
 
-        // `path` is the raw request-target's path component (still percent-encoded); decode
-        // the id remainder EXACTLY ONCE here (JS parity: server.ts decodes the WHATWG URL's
-        // raw pathname exactly once) — decoding twice would turn a literal '+' into a space.
+        // `path` is the raw request-target's path component (still percent-encoded); decode the id
+        // remainder exactly once here (matching server.ts's single decode of the WHATWG URL's raw
+        // pathname). Decoding twice would turn a literal '+' into a space.
         String rawId = path.replaceFirst("^/v1/models/?", "");
         String id = decodeUrlComponentOnce(rawId);
         if (!id.isEmpty()) {
@@ -367,7 +356,7 @@ public final class Router {
         return resp;
     }
 
-    // -- url helpers (no java.net — hand-rolled for transpilability) ---------------
+    // -- url helpers (no java.net, hand-rolled for transpilability) ---------------
 
     private static String pathOf(String url) {
         if (url == null) return "/";
@@ -428,18 +417,18 @@ public final class Router {
                 sb.appendCodePoint(cp);
                 i += 4;
             } else {
-                sb.append((char) b0); // malformed sequence — best-effort passthrough
+                sb.append((char) b0); // malformed sequence, best-effort passthrough
                 i++;
             }
         }
         return sb.toString();
     }
 
-    // -- JSON boundary (Phase 2 TeaVM export surface) --------------------------
+    // -- JSON boundary -----------------------------------------------------------
 
     /**
-     * String/JSON boundary over {@link #route}: parses {@code {method,url,headers,body}} into
-     * an {@link HttpRequest}, routes it, and stringifies the resulting {@link HttpResponse} as
+     * String/JSON boundary over {@link #route}: parses {@code {method,url,headers,body}} into an
+     * {@link HttpRequest}, routes it, and stringifies the resulting {@link HttpResponse} as
      * {@code {status,headers,body}}. This is the export surface a non-JVM host (e.g. a TeaVM
      * transpile target) calls across the JS/Java boundary with plain strings.
      */

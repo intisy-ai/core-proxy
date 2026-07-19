@@ -9,9 +9,9 @@ include ":teavm"
 
 // :ir - core-ir's canonical IR types + vendor translators (AnthropicTranslator/GeminiTranslator),
 // aliased in exactly like providers alias :routing/:teavm (see claude-code-auth's java/settings.gradle
-// for the identical recipe). core-ir is a DIRECT submodule of core-proxy (../core-ir from here, i.e.
-// core-proxy/core-ir), pinned to a fixed commit (see .gitmodules / core-ir's own git history). SP-3:
-// :routing's Provider/RoutingProfile reference core-ir's Translator/IrRequest/IrResponse types so the
-// front-door (Router) can carry IR alongside the legacy HttpRequest/HttpResponse path.
+// for the identical recipe). core-ir is a direct submodule of core-proxy (../core-ir from here, i.e.
+// core-proxy/core-ir), pinned to a fixed commit (see .gitmodules). :routing's Provider/RoutingProfile
+// reference core-ir's Translator/IrRequest/IrResponse types so the front-door (Router) can carry IR
+// alongside the HttpRequest/HttpResponse path.
 include ":ir"
 project(":ir").projectDir = file("../core-ir/java/ir")

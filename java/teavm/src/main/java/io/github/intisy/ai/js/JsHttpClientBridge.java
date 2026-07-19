@@ -16,36 +16,34 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * THE decisive piece of Phase 2 Task 5: a shared {@link HttpClient} (blocking-shaped —
- * {@code send(HttpRequest): HttpResponse}) whose implementation is actually a JS-provided
- * async function (a {@code fetch}-backed {@code (requestJson: string) => Promise<string>} in
- * production; a mocked one in the test harness), bridged via TeaVM's {@code @Async} native
- * method + {@link AsyncCallback} mechanism.
+ * A shared {@link HttpClient} (blocking-shaped, {@code send(HttpRequest): HttpResponse}) whose
+ * implementation is a JS-provided async function (a {@code fetch}-backed
+ * {@code (requestJson: string) => Promise<string>} in production; a mocked one in the test harness),
+ * bridged via TeaVM's {@code @Async} native method + {@link AsyncCallback} mechanism.
  *
- * <p>Mechanism: {@link #send} looks synchronous to every caller up the shared call graph
- * (Router.routeJson -&gt; ProxyHandler.handle -&gt; this.send), but internally suspends on
- * {@link #awaitSend}, a native method marked {@code @Async}. TeaVM's whole-program CPS
- * transform propagates "this call graph suspends" all the way up to whichever entrypoint
- * triggered it — in {@link AiJavaJs#routeJsonAsync} that entrypoint runs inside
- * {@code JSPromise.callAsync}, so the suspend/resume surfaces to JS as a normal
+ * <p>{@link #send} looks synchronous to every caller up the shared call graph (Router.routeJson
+ * -&gt; ProxyHandler.handle -&gt; this.send), but internally suspends on {@link #awaitSend}, a native
+ * method marked {@code @Async}. TeaVM's whole-program CPS transform propagates the suspend all the
+ * way up to whichever entrypoint triggered it; in {@link CoreProxyJs#routeJsonAsync} that entrypoint
+ * runs inside {@code JSPromise.callAsync}, so the suspend/resume surfaces to JS as a normal
  * {@code Promise} that resolves once the JS side's fetch-backed send() resolves.
  */
 public final class JsHttpClientBridge implements HttpClient {
 
-    /** JS-provided async HTTP transport: {@code (requestJson: string) => Promise<string>}.
-     *  The request/response are plain JSON strings (mirrors shared's own {@code routeJson}
-     *  JSON boundary) — no per-field JSO overlay types needed for headers/body/etc.
+    /** JS-provided async HTTP transport: {@code (requestJson: string) => Promise<string>}. The
+     *  request/response are plain JSON strings (matching Router's own {@code routeJson} JSON
+     *  boundary), so no per-field JSO overlay types are needed for headers/body/etc.
      *
      *  <p>Uses {@link JSString}, not plain {@code String}, because TeaVM's automatic
-     *  String&lt;-&gt;native-JS-string conversion only fires at a DECLARED (non-generic)
+     *  String&lt;-&gt;native-JS-string conversion only fires at a declared (non-generic)
      *  JSBody/JSMethod/JSExport boundary. A value flowing through a generic JS-facing functor
      *  (like {@code JSPromise<T>}'s {@code JSMapping<T,V>}/{@code JSConsumer<T>} callbacks) is
-     *  type-erased at that call site, so no wrap/unwrap happens and a raw native JS string
-     *  leaks straight into Java code expecting a {@code jl_String} wrapper (methods like
+     *  type-erased at that call site, so no wrap/unwrap happens and a raw native JS string leaks
+     *  straight into Java code expecting a {@code jl_String} wrapper (methods like
      *  {@code length()}/{@code charAt()} then throw, reading undefined internal fields).
-     *  {@link JSString} needs no such wrapping — it directly overlays the native JS string —
-     *  so routing values through it at every generic boundary sidesteps the gap entirely;
-     *  {@code String} conversion happens only at the very edges via
+     *  {@link JSString} needs no such wrapping (it directly overlays the native JS string), so
+     *  routing values through it at every generic boundary sidesteps the gap entirely;
+     *  {@code String} conversion happens only at the edges via
      *  {@code JSString.valueOf}/{@code .stringValue()}. */
     @JSFunctor
     public interface JsHttpSend extends JSObject {
@@ -108,11 +106,11 @@ public final class JsHttpClientBridge implements HttpClient {
     @Async
     private static native String awaitSend(JsHttpSend fn, String reqJson);
 
-    // Companion method: same name, void return, trailing AsyncCallback<T> — this is the exact
-    // shape TeaVM's async codegen looks for to pair with the @Async native declaration above.
-    // `value`/`error` below are JSString/Object coming straight from the JS Promise's own
-    // resolve/reject call — .stringValue() is the explicit, unambiguous String conversion
-    // (see the JsHttpSend javadoc for why this can't be a plain generic String parameter).
+    // Companion method: same name, void return, trailing AsyncCallback<T>, the exact shape TeaVM's
+    // async codegen looks for to pair with the @Async native declaration above. `value`/`error` below
+    // are JSString/Object coming straight from the JS Promise's own resolve/reject call;
+    // .stringValue() is the explicit String conversion (see the JsHttpSend javadoc for why this can't
+    // be a plain generic String parameter).
     private static void awaitSend(JsHttpSend fn, String reqJson, AsyncCallback<String> callback) {
         fn.send(JSString.valueOf(reqJson)).then(
                 value -> {

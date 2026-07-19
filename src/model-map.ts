@@ -1,8 +1,8 @@
-// Shared Claude tier -> provider-model resolution, used by the proxy (routing), the
-// Providers tab (display), and the wrapper (model env injection). Self-heals: a
-// stored mapping whose model no longer exists in the live catalog (e.g. after a model
-// refresh) is auto-re-derived to the current best model for that tier, so the mapping
-// tracks the app's models without the user re-assigning. Pure fs/path only.
+// Shared tier -> provider-model resolution, used by the proxy (routing), the Providers tab
+// (display), and the wrapper (model env injection). Self-heals: a stored mapping whose model no
+// longer exists in the live catalog (e.g. after a model refresh) is auto-re-derived to the current
+// best model for that tier, so the mapping tracks the app's models without the user re-assigning.
+// Pure fs/path only.
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -28,10 +28,10 @@ function modelCache(configDir: string): ModelCacheMap {
   return {};
 }
 
-// Tiers are DETECTED from the tier-source provider's catalog (family token of each
-// model id, via profile.tierRegex, e.g. claude-fable-5 -> "fable"), so new families
-// appear as mapping slots automatically. profile.tierOrder keeps known families in a
-// familiar order; profile.tierFallback covers pre-login (no catalog yet).
+// Tiers are detected from the tier-source provider's catalog (family token of each model id, via
+// profile.tierRegex, e.g. claude-fable-5 -> "fable"), so new families appear as mapping slots
+// automatically. profile.tierOrder keeps known families in a familiar order; profile.tierFallback
+// covers pre-login (no catalog yet).
 export function claudeTiers(configDir: string, profile: RoutingProfile): string[] {
   const cc = modelCache(configDir)[profile.tierSourceProvider];
   const ids = cc && cc.ranking && cc.ranking.length ? cc.ranking : Object.keys(cc?.models || {});
@@ -57,8 +57,8 @@ export function readModelMap(configDir: string, profile: RoutingProfile): Record
   return {};
 }
 
-// Live catalog [{provider, model, name}] from each deployed provider's authProviders,
-// preferring core-auth's fetched cache, else the package's static list.
+// Live catalog [{provider, model, name}] from each deployed provider's authProviders, preferring
+// core-auth's fetched cache, else the package's static list.
 export function catalogEntries(configDir: string): CatalogEntry[] {
   const out: CatalogEntry[] = [];
   const reposDir = join(configDir, "repos");
@@ -102,23 +102,22 @@ export function catalogEntries(configDir: string): CatalogEntry[] {
   return out;
 }
 
-// Normalize a stored slot value into an ordered chain: legacy single {provider,model}
-// -> [obj]; an array stays; anything else -> []. First entry is the primary, the rest
-// are ordered fallbacks the proxy tries when earlier ones are rate-limited.
+// Normalize a stored slot value into an ordered chain: a single {provider,model} becomes [obj]; an
+// array stays; anything else becomes []. First entry is the primary, the rest are ordered fallbacks
+// the proxy tries when earlier ones are rate-limited.
 export function normalizeChain(raw: unknown): Chain {
   if (!raw) return [];
   const arr = Array.isArray(raw) ? raw : [raw];
   return arr.filter((e): e is Assignment => !!e && !!(e as Assignment).provider && !!(e as Assignment).model);
 }
 
-// Effective tier -> ORDERED CHAIN of {provider, model, name, derived}. Each stored
-// entry is kept while its model still exists in the catalog; a fully stale tier
-// heals ONLY within the provider the user chose — never silently to a different
-// provider (an Opus->antigravity mapping must not become the tier-source provider and
-// then gate on its accounts). When the chosen provider has no catalog at all, the
-// stored entry passes through untouched (the catalog may simply not be fetched yet;
-// if the model is really gone the provider reports its own clear error). Only a tier
-// with NO stored choice derives from the whole catalog. "-auto" ids skipped.
+// Effective tier -> ordered chain of {provider, model, name, derived}. Each stored entry is kept
+// while its model still exists in the catalog; a fully stale tier heals only within the provider the
+// user chose, never silently to a different provider (an Opus->antigravity mapping must not become
+// the tier-source provider and then gate on its accounts). When the chosen provider has no catalog
+// at all, the stored entry passes through untouched (the catalog may simply not be fetched yet; if
+// the model is really gone the provider reports its own clear error). Only a tier with no stored
+// choice derives from the whole catalog. "-auto" ids skipped.
 export function resolveModelMap(configDir: string, profile: RoutingProfile): ModelMap {
   const stored = readModelMap(configDir, profile);
   const catalog = catalogEntries(configDir).filter((e) => !/-auto$/.test(e.model));
@@ -139,9 +138,9 @@ export function resolveModelMap(configDir: string, profile: RoutingProfile): Mod
       else if (!providerKnown) out.push({ provider: e.provider, model: e.model, name: e.model, derived: false });
     }
     if (out.length) return out;
-    // Whole chain stale — heal WITHIN the chosen provider (only its model id
-    // changed); cross-provider derivation is reserved for unset tiers, preferring
-    // the tier-source provider (the app's own models are the natural default).
+    // Whole chain stale: heal within the chosen provider (only its model id changed);
+    // cross-provider derivation is reserved for unset tiers, preferring the tier-source provider
+    // (the app's own models are the natural default).
     const preferred = chain[0] && chain[0].provider;
     if (preferred) {
       const d = deriveIn(catalog.filter((e) => e.provider === preferred), keyword);
@@ -160,10 +159,10 @@ export function resolveModelMap(configDir: string, profile: RoutingProfile): Mod
   return eff as ModelMap;
 }
 
-// {key,value} env pairs the wrapper exports so the app's /model shows the mapped
-// models as custom tier entries (real names via *_NAME) and uses the default tier as
-// the session default. Values (display names) can contain spaces/parens, so the
-// caller quotes per shell — hence pairs, not pre-joined lines.
+// {key,value} env pairs the wrapper exports so the app's /model shows the mapped models as custom
+// tier entries (real names via *_NAME) and uses the default tier as the session default. Values
+// (display names) can contain spaces/parens, so the caller quotes per shell, hence pairs, not
+// pre-joined lines.
 export function modelEnvPairs(configDir: string, profile: RoutingProfile): { key: string; value: string }[] {
   const eff = resolveModelMap(configDir, profile);
   const pairs: { key: string; value: string }[] = [];

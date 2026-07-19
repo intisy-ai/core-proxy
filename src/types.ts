@@ -1,8 +1,7 @@
-// SP-3: the canonical IR types + per-vendor translator API, type-only (erased at build time --
-// core-proxy's own compiled dist/server.js never imports core-ir at runtime; only a caller that
-// actually constructs a translator instance, e.g. a profile or a test, pulls in the real module).
-// core-ir is a submodule (./core-ir) built the same way claude-code-auth/stub-auth's provider
-// modules consume it -- see ./core-ir/README.md and this repo's java/settings.gradle :ir alias.
+// Canonical IR types and the per-vendor translator API, imported type-only so they erase at
+// build time: core-proxy's compiled dist never imports core-ir at runtime; only a caller that
+// constructs a translator instance (a profile or a test) pulls in the real module. core-ir is a
+// submodule (./core-ir), reached in Java via java/settings.gradle's :ir alias.
 import type { IrRequest, IrResponse, IrStreamEvent, VendorTranslator } from "../core-ir/dist/index.js";
 export type { IrRequest, IrResponse, IrStreamEvent, VendorTranslator } from "../core-ir/dist/index.js";
 
@@ -12,50 +11,44 @@ export type HandlerCtx = {
   model: string;
 };
 
-// A stream of canonical IR events, produced directly by an IR-native provider's handleIr (not
-// vendor SSE bytes -- those only exist at the wire boundary, decoded/encoded by the translator).
+// A stream of canonical IR events produced directly by a provider's handleIr, not vendor SSE
+// bytes (those exist only at the wire boundary, encoded by the translator).
 export type IrEventStream = ReadableStream<IrStreamEvent>;
 
 export type ProxyHandler = {
   /**
-   * IR-native entry point (SP-3, the layering flip): receives an already app-wire-decoded IrRequest
-   * and returns an IrResponse (non-streaming) or an IrEventStream (streaming), with zero app-wire
-   * format knowledge in the handler itself -- the front-door (server.ts route()) owns decoding the
-   * inbound request into IR (via RoutingProfile.translator) and encoding the result back to the
-   * app's wire format. This is the contract every ecosystem provider implements post-T4.
+   * Receives an already-decoded IrRequest and returns an IrResponse (non-streaming) or an
+   * IrEventStream (streaming), with no app-wire format knowledge: the front-door (server.ts
+   * route()) owns decoding the inbound request into IR via RoutingProfile.translator and encoding
+   * the result back to the app's wire format.
    *
-   * On a non-2xx upstream outcome a handleIr implementation throws `HandleIrError` (see below)
-   * rather than returning it as data, so the front door can still route on it (rate-limit fallback,
-   * verbatim 4xx). A handler supplies handleIr, the legacy `handle`, or both -- the gate in route()
-   * requires at least one.
+   * On a non-2xx upstream outcome an implementation throws HandleIrError (see below) rather than
+   * returning it as data, so the front door can still route on it (rate-limit fallback, verbatim
+   * 4xx). A handler supplies handleIr, handle, or both; route() requires at least one.
    */
   handleIr?: (ir: IrRequest, ctx: HandlerCtx) => Promise<IrResponse | IrEventStream>;
   /**
-   * Legacy app-wire entry point: the front-door hands it the raw inbound Request and expects a wire
-   * Response. Optional -- an IR-native handler omits it entirely (providers do post-T4). The generic
-   * engine keeps calling it for a handler that supplies only `handle` (e.g. a profile with no
-   * translator), so a non-IR app-proxy remains possible; it is never an app-specific trace in a
-   * provider, only an engine capability.
+   * Optional app-wire entry point: the front-door hands it the raw inbound Request and expects a
+   * wire Response. The engine calls it for a handler that supplies only handle (e.g. a profile
+   * with no translator), so a non-IR app-proxy remains possible.
    */
   handle?: (request: Request, ctx: HandlerCtx) => Promise<Response>;
 };
 
 /**
- * T3c-1: the typed transport error a `handleIr` implementation throws for a non-2xx upstream
- * outcome (rate limit, bad request, etc.), carrying exactly what the legacy `handle()` path's
- * real Response carried -- status/headers/body -- so the front door (server.ts route()) can
- * reconstruct an equivalent Response and feed it through the SAME isRateLimited/rateLimitResetMs/
- * fallback/final-429-synthesis logic used for a legacy Response, instead of collapsing every
- * throw to a flat 502 (which lost status fidelity and broke rate-limit fallback). A throw that is
- * NOT a HandleIrError is a genuine unexpected failure and stays a flat 502, unchanged.
+ * The typed transport error a handleIr implementation throws for a non-2xx upstream outcome
+ * (rate limit, bad request, etc.), carrying status/headers/body so the front door (server.ts
+ * route()) can reconstruct an equivalent Response and feed it through the same isRateLimited/
+ * rateLimitResetMs/fallback/final-429-synthesis logic used for any Response, instead of collapsing
+ * every throw to a flat 502. A throw that is not a HandleIrError is a genuine unexpected failure
+ * and stays a flat 502.
  */
 export class HandleIrError extends Error {
   status: number;
   headers?: Record<string, string>;
   body: string;
-  /** Optional convenience: when set and no x-hub-retry-after-ms header is already present,
-   *  server.ts injects it so rateLimitResetMs can compute the reset time without the thrower
-   *  having to know the header name. */
+  /** When set and no x-hub-retry-after-ms header is already present, server.ts injects it so
+   *  rateLimitResetMs can compute the reset time without the thrower knowing the header name. */
   retryAfterMs?: number;
 
   constructor(init: { status: number; headers?: Record<string, string>; body: string; retryAfterMs?: number }) {
@@ -69,12 +62,11 @@ export class HandleIrError extends Error {
 }
 
 /**
- * Duck-typed recognizer for a HandleIrError, used at the front-door instead of `instanceof`.
- * Providers are esbuild-bundled independently, so each provider's `dist/handler.js` inlines its
- * OWN copy of this class. When the front-door (a SEPARATE core-proxy bundle) catches a throw from
- * a dynamically-loaded provider handler, `instanceof HandleIrError` compares against the wrong copy
- * and returns false, silently collapsing the typed transport error to a 502 and breaking rate-limit
- * fallback. Matching the stable `name` marker plus the transport shape survives the bundle boundary.
+ * Duck-typed recognizer used at the front-door instead of instanceof. Each provider is
+ * esbuild-bundled independently and inlines its own copy of this class, so instanceof against the
+ * front-door's (separate) copy returns false and would silently collapse the typed transport error
+ * to a 502, breaking rate-limit fallback. Matching the stable `name` marker plus the transport
+ * shape survives the bundle boundary.
  */
 export function isHandleIrError(e: unknown): e is HandleIrError {
   return (
@@ -116,10 +108,8 @@ export type RateLimitInfo = {
 export type RoutingProfile = {
   configFile: string;
   /**
-   * Loader-facing config field name for the routing-enable toggle (read by the
-   * loader's route-mode.ts / tui-extension.ts, not by this engine). Intentionally
-   * NOT consumed by core-proxy's model-map engine — do not wire it into
-   * readModelMap, which reads the separate `modelMap` field instead.
+   * Loader-facing config field name for the routing-enable toggle, read by the loader, not by this
+   * engine. Do not wire it into readModelMap, which reads the separate `modelMap` field.
    */
   routingKey: string;
   tierSourceProvider: string;
@@ -130,17 +120,13 @@ export type RoutingProfile = {
   defaultContext: number;
   defaultOutput: number;
   nativeRateLimit: (info: RateLimitInfo) => Promise<{ status: number; headers: Record<string, string>; body: string }>;
-  // app-specific test for a model native to this app; when the requested model
-  // matches, the "not in catalog" notification is suppressed. Optional — when
-  // absent, unknown models always notify.
+  // Test for a model native to this app; when the requested model matches, the "not in catalog"
+  // notification is suppressed. When absent, unknown models always notify.
   nativeModelPattern?: RegExp;
   /**
-   * SP-3: the app<->IR translator for this profile (e.g. core-ir's `translators.anthropic` for
-   * Claude Code / OpenCode, both of which speak the Anthropic wire format). An injected instance
-   * rather than a name/key — profiles already carry functions (nativeRateLimit), so this matches
-   * the existing shape and needs no separate registry. Undefined means this profile has no IR
-   * front-door yet: the server then uses ONLY the legacy handle() path unconditionally, so an
-   * existing profile that never sets this field keeps working unchanged (additive/coexist).
+   * The app<->IR translator for this profile (e.g. core-ir's anthropic translator for Claude Code
+   * and OpenCode, which both speak the Anthropic wire format). Undefined means the profile has no
+   * IR front-door: the server then uses only the handle() path.
    */
   translator?: VendorTranslator;
 };

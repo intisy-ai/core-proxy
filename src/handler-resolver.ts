@@ -1,10 +1,6 @@
-// Provider handler modules are loaded dynamically from disk. A long-lived proxy
-// process caches ESM imports by URL, so without an mtime cache-bust a provider
-// update (e.g. new 403 handling) would never take effect until the process
-// restarts. Cache per provider path; re-import only when the file's mtime moves.
-// (Ports claude-code-loader/src/proxy.ts:148-160 `loadHandler`/`HANDLER_CACHE`,
-// with the provider list injected via `listProviders` instead of calling the
-// loader's own discovery directly.)
+// Provider handler modules are loaded dynamically from disk. A long-lived proxy process caches ESM
+// imports by URL, so without an mtime cache-bust a provider update would never take effect until the
+// process restarts. Cache per provider path; re-import only when the file's mtime moves.
 
 import { existsSync, statSync } from "node:fs";
 import { pathToFileURL } from "node:url";

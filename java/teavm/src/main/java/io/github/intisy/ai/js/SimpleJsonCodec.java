@@ -19,10 +19,10 @@ public class SimpleJsonCodec implements JsonCodec {
 
     @Override
     public Object parse(String jsonText) {
-        // Matches GsonJsonCodec.parse exactly: null/empty -> null. A whitespace-only string
-        // ALSO parses to null under gson (JsonReader.peek() hits EOFException before reading any
-        // token, so Gson.fromJson's isEmpty flag stays true and it returns null) — mirrored below
-        // by skipping leading whitespace first and returning null if that reaches the end.
+        // Matches GsonJsonCodec.parse exactly: null/empty -> null. A whitespace-only string also
+        // parses to null under gson (JsonReader.peek() hits EOFException before reading any token, so
+        // Gson.fromJson's isEmpty flag stays true and it returns null), mirrored below by skipping
+        // leading whitespace first and returning null if that reaches the end.
         if (jsonText == null || jsonText.isEmpty()) return null;
         Parser p = new Parser(jsonText);
         p.skipWhitespace();
@@ -83,11 +83,11 @@ public class SimpleJsonCodec implements JsonCodec {
         sb.append(']');
     }
 
-    // Byte-compatible with gson's JsonWriter.string(...) under disableHtmlEscaping: '"', '\\',
-    // and the named control escapes (\n \r \t \b \f) get their short form; every OTHER control
-    // char in 0x00-0x1F gets a unicode escape (lowercase hex, 4 digits); nothing else is escaped
-    // — in particular '<' '>' '&' '=' '\'' '/' are all passed through literally (gson only
-    // escapes those when HTML-escaping is enabled, which this codec's JVM counterpart disables).
+    // Byte-compatible with gson's JsonWriter.string(...) under disableHtmlEscaping: '"', '\\', and
+    // the named control escapes (\n \r \t \b \f) get their short form; every other control char in
+    // 0x00-0x1F gets a unicode escape (lowercase hex, 4 digits); nothing else is escaped. In
+    // particular '<' '>' '&' '=' '\'' '/' are all passed through literally (gson only escapes those
+    // when HTML-escaping is enabled, which this codec's JVM counterpart disables).
     private static void writeString(String s, StringBuilder sb) {
         sb.append('"');
         for (int i = 0; i < s.length(); i++) {

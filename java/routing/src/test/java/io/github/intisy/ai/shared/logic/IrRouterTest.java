@@ -30,11 +30,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * SP-3 T1: proves the Router's IR front door end to end (an inbound Anthropic-wire request is
- * decoded to the canonical IR via {@link RoutingProfile#translator}, routed on {@code IrRequest
- * .model}, handed to a {@link Provider#handleIr}, and the returned {@link IrResponse} is encoded
- * back to Anthropic wire) alongside the fallback that keeps a legacy handle()-only provider
- * working unchanged even when the profile DOES carry a translator (coexist-then-remove).
+ * Proves the Router's IR front door end to end (an inbound Anthropic-wire request is decoded to the
+ * canonical IR via {@link RoutingProfile#translator}, routed on {@code IrRequest.model}, handed to a
+ * {@link Provider#handleIr}, and the returned {@link IrResponse} is encoded back to Anthropic wire),
+ * alongside the fallback that keeps a handle()-only provider working even when the profile carries a
+ * translator.
  */
 class IrRouterTest {
 
@@ -87,8 +87,8 @@ class IrRouterTest {
         return req;
     }
 
-    /** An IR-native echo provider: handleIr overridden, handle() left as the Provider default's
-     *  legacy signature but never expected to be called by this test. */
+    /** An IR-native echo provider: handleIr overridden, handle() overridden only to assert it is
+     *  never called on the IR path. */
     private static final class EchoIrProvider implements Provider {
         private final String id;
 
@@ -131,8 +131,8 @@ class IrRouterTest {
         }
     }
 
-    /** A legacy Provider that only implements handle() -- handleIr is left as Provider's default
-     *  (throws UnsupportedOperationException), proving the Router's fallback. */
+    /** A Provider that only implements handle(); handleIr is left as Provider's default (throws
+     *  UnsupportedOperationException), proving the Router's fallback. */
     private static final class LegacyOnlyProvider implements Provider {
         @Override
         public String id() {
@@ -197,9 +197,9 @@ class IrRouterTest {
 
         assertEquals(200, resp.status);
         // The Router encoded the provider's IrResponse back to Anthropic wire via the profile's
-        // translator -- decode it again to assert on the neutral shape, not a raw string match.
+        // translator; decode it again to assert on the neutral shape, not a raw string match.
         IrResponse decoded = anthropicTranslator().decodeResponse(resp.body);
-        assertEquals("m-ok", decoded.model, "ctx.model (the ASSIGNED model) must reach the provider, matching the legacy handle() contract");
+        assertEquals("m-ok", decoded.model, "ctx.model (the assigned model) must reach the provider, matching the handle() contract");
         assertEquals("end_turn", decoded.stopReason);
         assertTrue(decoded.content.get(0) instanceof TextBlock);
         assertEquals("handled via IR: hi there", ((TextBlock) decoded.content.get(0)).text);
@@ -219,14 +219,14 @@ class IrRouterTest {
         HttpResponse resp = Router.route(post("/v1/messages", wireRequest), opts);
 
         assertEquals(200, resp.status);
-        // Untranslated, verbatim legacy body -- proves the UnsupportedOperationException fallback
-        // reached handle() rather than trying (and failing) to encode anything through the IR.
+        // Untranslated, verbatim body: proves the UnsupportedOperationException fallback reached
+        // handle() rather than trying (and failing) to encode anything through the IR.
         assertEquals("served m-legacy", resp.body);
     }
 
-    // T3c-1: a thrown HandleIrException must reconstruct a real HttpResponse and flow through the
-    // SAME RateLimit.isRateLimited/fallback/final-429-synthesis logic as a legacy handle() response,
-    // instead of collapsing to a flat 502 (which lost status fidelity and broke rate-limit fallback).
+    // A thrown HandleIrException must reconstruct a real HttpResponse and flow through the same
+    // RateLimit.isRateLimited/fallback/final-429-synthesis logic as a wire handle() response, instead
+    // of collapsing to a flat 502 (which loses status fidelity and breaks rate-limit fallback).
     @Test
     void handleIrThrows429TypedException_triggersFallback_thenSynthesizesFinal429() {
         InMemoryStore store = new InMemoryStore();
@@ -248,8 +248,8 @@ class IrRouterTest {
         assertTrue(primary.called.get());
         assertTrue(fallback.called.get());
         assertEquals(429, resp.status);
-        // Body comes from profile.nativeRateLimit's final synthesis -- proves the fallback +
-        // final-429 path ran, not the flat 502 error shape.
+        // Body comes from profile.nativeRateLimit's final synthesis: proves the fallback + final-429
+        // path ran, not the flat 502 error shape.
         assertTrue(resp.body.contains("rate_limit_error"));
     }
 
@@ -298,7 +298,7 @@ class IrRouterTest {
     void noTranslatorOnProfile_neverAttemptsIrEvenForAnIrCapableProvider() {
         InMemoryStore store = new InMemoryStore();
         store.put(CONFIG_FILE, "{\"modelMap\":{\"opus\":[{\"provider\":\"ok\",\"model\":\"m-ok\"}]}}");
-        RoutingProfile profile = testProfile(null); // no translator -> legacy-only, unconditionally
+        RoutingProfile profile = testProfile(null); // no translator, so the wire handle() path only
         Provider provider = new Provider() {
             @Override
             public String id() {

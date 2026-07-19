@@ -7,7 +7,7 @@ import java.util.List;
  * {@code GET /v1/quota} wire shape ({@code accounts[]}): the account-level {@link #accountId},
  * {@link #accountEmail}, and {@link #accountStatus} (e.g. active|rate-limited|error) plus its list
  * of pool {@link #bars}. Keeping the grouping per-account (rather than flattening every bar into one
- * account-keyed list) preserves accounts that have no bars — an errored account whose quota couldn't
+ * account-keyed list) preserves accounts that have no bars: an errored account whose quota couldn't
  * be fetched still appears, which the dashboard's account count relies on.
  */
 public final class AccountQuota {

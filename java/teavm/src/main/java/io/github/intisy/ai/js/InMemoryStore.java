@@ -10,9 +10,8 @@ import java.util.function.UnaryOperator;
 
 /**
  * In-memory {@link Store}: a plain {@code Map<String,String>}, no I/O. Seeded up front from a
- * JS-provided {key: jsonString} snapshot (see {@link AiJavaJs#seedStore}) — a full JSO-bridged
- * {@code Store} (get/put/exists/delete/update/listKeys each round-tripping into JS) is out of
- * scope for proving the async HttpClient bridge, which is this task's actual decisive question.
+ * JS-provided {key: jsonString} snapshot (see {@link CoreProxyJs#seedStore}). For a live JS-backed
+ * store that round-trips every call into JS, see {@link JsStoreBridge}.
  */
 public class InMemoryStore implements Store {
     private final Map<String, String> data = new LinkedHashMap<>();

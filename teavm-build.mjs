@@ -2,7 +2,7 @@
 // Generic gradle-TeaVM -> stable-ESM staging step, reusable by ANY module that TeaVM-compiles Java
 // into JS. Lives in core-proxy (the generic routing/TeaVM engine) so an app-proxy that nests
 // core-proxy as a submodule (claude-code-proxy, opencode-proxy) reaches it via core-proxy/teavm-build.mjs
-// without needing the `core` submodule. Nothing here is app-specific — everything is passed by flag.
+// without needing the `core` submodule. Nothing here is app-specific; everything is passed by flag.
 //
 // CONTRACT:
 //   1. Runs `./gradlew <module>:<task>` (default task: generateJavaScript) inside --java-dir.
@@ -73,7 +73,7 @@ const generatedFile = join(generatedDir, candidates[0]);
 
 mkdirSync(dirname(outPath), { recursive: true });
 copyFileSync(generatedFile, outPath);
-// Sourcemap, if TeaVM emitted one alongside — copy it too so it doesn't silently point nowhere.
+// Sourcemap, if TeaVM emitted one alongside: copy it too so it doesn't silently point nowhere.
 const mapFile = `${generatedFile}.map`;
 if (existsSync(mapFile)) copyFileSync(mapFile, `${outPath}.map`);
 
