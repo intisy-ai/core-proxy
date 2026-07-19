@@ -61,6 +61,25 @@ export class HandleIrError extends Error {
   }
 }
 
+/**
+ * Duck-typed recognizer for a HandleIrError, used at the front-door instead of `instanceof`.
+ * Providers are esbuild-bundled independently, so each provider's `dist/handler.js` inlines its
+ * OWN copy of this class. When the front-door (a SEPARATE core-proxy bundle) catches a throw from
+ * a dynamically-loaded provider handler, `instanceof HandleIrError` compares against the wrong copy
+ * and returns false, silently collapsing the typed transport error to a 502 and breaking rate-limit
+ * fallback. Matching the stable `name` marker plus the transport shape survives the bundle boundary.
+ */
+export function isHandleIrError(e: unknown): e is HandleIrError {
+  return (
+    e instanceof HandleIrError ||
+    (typeof e === "object" &&
+      e !== null &&
+      (e as { name?: unknown }).name === "HandleIrError" &&
+      typeof (e as { status?: unknown }).status === "number" &&
+      typeof (e as { body?: unknown }).body === "string")
+  );
+}
+
 export type HandlerResolver = (providerName: string) => Promise<ProxyHandler | null>;
 
 export type Assignment = {

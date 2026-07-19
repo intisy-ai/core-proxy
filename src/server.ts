@@ -11,7 +11,7 @@ import { createServer, type Server } from "node:http";
 import { Readable } from "node:stream";
 import { resolveModelMap, catalogEntries } from "./model-map.js";
 import { isRateLimited, rateLimitResetMs, rateLimitFinal } from "./rate-limit.js";
-import { HandleIrError } from "./types.js";
+import { isHandleIrError } from "./types.js";
 import type { Assignment, CatalogEntry, Chain, IrEventStream, IrRequest, IrResponse, ProxyOptions, ProxyServer, RoutingProfile } from "./types.js";
 
 function errorResponse(status: number, message: string): Response {
@@ -208,7 +208,7 @@ export function createProxyServer(opts: ProxyOptions): ProxyServer {
           const irResult = await handler.handleIr(ir, ctx);
           resp = await encodeIrResult(irResult);
         } catch (e) {
-          if (e instanceof HandleIrError) {
+          if (isHandleIrError(e)) {
             // A typed transport error carries the provider's real HTTP status/headers/body --
             // reconstruct it as a Response so it flows through the SAME isRateLimited/
             // rateLimitResetMs/fallback logic below as a legacy handler's Response would,

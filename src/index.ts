@@ -16,7 +16,7 @@ export type {
   ProxyOptions,
   ProxyServer,
 } from "./types.js";
-export { isValidProfile, HandleIrError } from "./types.js";
+export { isValidProfile, HandleIrError, isHandleIrError } from "./types.js";
 
 export { isRateLimited, rateLimitResetMs, rateLimitFinal } from "./rate-limit.js";
 

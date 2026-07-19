@@ -195,6 +195,43 @@ it("handleIr throwing a plain non-typed error still collapses to a flat 502, unc
   expect(body.error.type).toBe("loader_proxy_error");
 });
 
+// T3c-4: providers are esbuild-bundled independently, so a deployed provider throws its OWN inlined
+// copy of HandleIrError -- `instanceof` against the front-door's copy would be false. The front-door
+// must recognize the typed error by its stable `name` marker + transport shape, NOT by class identity,
+// or the 429 fallback silently breaks in production. This simulates the foreign-copy throw.
+it("recognizes a foreign-bundle HandleIrError (marker-shaped, not instanceof) and still falls back", async () => {
+  writeFileSync(
+    join(dir, "config", "claude-code-loader.json"),
+    JSON.stringify({ modelMap: { opus: [{ provider: "primary", model: "m-primary" }, { provider: "fallback", model: "m-fallback" }] } })
+  );
+  // A plain object shaped exactly like a HandleIrError from another bundle: it is NOT an instance of
+  // this bundle's HandleIrError class, but carries the same `name`/status/body contract.
+  const foreign = Object.assign(new Error("handleIr transport error: 429"), {
+    name: "HandleIrError",
+    status: 429,
+    body: JSON.stringify({ type: "error" }),
+    retryAfterMs: 5000,
+  });
+  expect(foreign instanceof HandleIrError).toBe(false);
+  const handlers: any = {
+    primary: {
+      handle: async () => { throw new Error("legacy handle() must not be called when the IR path is taken"); },
+      handleIr: async () => { throw foreign; },
+    },
+    fallback: {
+      handle: async () => { throw new Error("legacy handle() must not be called when the IR path is taken"); },
+      handleIr: async () => { throw Object.assign(new Error("429"), { name: "HandleIrError", status: 429, body: JSON.stringify({ type: "error" }) }); },
+    },
+  };
+  srv = createProxyServer({ configDir: dir, profile, port: 0, resolveHandler: async (n) => handlers[n] ?? null });
+  port = await srv.listen();
+
+  const r = await fetch(`http://127.0.0.1:${port}/v1/messages`, { method: "POST", body: wireRequest });
+  expect(r.status).toBe(429);
+  const body = await r.json();
+  expect(body.error.type).toBe("rate_limit_error");
+});
+
 it("no translator on the profile never attempts the IR path, even for a handleIr-capable handler", async () => {
   const legacyProfile = { ...profile, translator: undefined };
   writeFileSync(join(dir, "config", "claude-code-loader.json"), JSON.stringify({ modelMap: { opus: [{ provider: "ok", model: "m-ok" }] } }));
