@@ -4,6 +4,7 @@ import io.github.intisy.ai.ir.IrRequest;
 import io.github.intisy.ai.ir.IrResponse;
 import io.github.intisy.ai.shared.routing.Assignment;
 import io.github.intisy.ai.shared.routing.CatalogEntry;
+import io.github.intisy.ai.shared.routing.HandleIrException;
 import io.github.intisy.ai.shared.routing.HandlerCtx;
 import io.github.intisy.ai.shared.routing.Provider;
 import io.github.intisy.ai.shared.routing.ProxyHandler;
@@ -92,7 +93,23 @@ public final class Router {
                     handled = true;
                 } catch (UnsupportedOperationException notIrCapable) {
                     // fall through to the legacy handle() call below
+                } catch (HandleIrException hie) {
+                    // A typed transport error carries the provider's real HTTP status/headers/
+                    // body -- reconstruct it as an HttpResponse so it flows through the SAME
+                    // RateLimit.isRateLimited/fallback logic below as a legacy handle() response
+                    // would, restoring status fidelity (e.g. 429 fallback, verbatim 400) on the
+                    // IR path.
+                    resp = new HttpResponse();
+                    resp.status = hie.status;
+                    Map<String, String> headers = hie.headers != null ? new LinkedHashMap<>(hie.headers) : new LinkedHashMap<>();
+                    if (hie.retryAfterMs != null && !hasHeaderIgnoreCase(headers, "x-hub-retry-after-ms")) {
+                        headers.put("x-hub-retry-after-ms", String.valueOf(hie.retryAfterMs));
+                    }
+                    resp.headers = headers;
+                    resp.body = hie.body;
+                    handled = true;
                 } catch (Exception e) {
+                    // Unexpected/non-typed throw -- a genuine bug, not a modeled transport outcome.
                     log(opts, "handleIr error for " + assigned.provider + ": " + e.getMessage());
                     lastResp = errorResponse(502, "Provider handler failed: " + e.getMessage(), opts.json);
                     continue;
@@ -140,6 +157,16 @@ public final class Router {
 
     private static String displayName(Assignment a) {
         return a.name != null && !a.name.isEmpty() ? a.name : a.model;
+    }
+
+    // Case-insensitive header presence check, mirroring JS Headers.has()'s case-insensitivity --
+    // used so injecting the retryAfterMs hint never duplicates a header the thrower already set
+    // under different casing.
+    private static boolean hasHeaderIgnoreCase(Map<String, String> headers, String name) {
+        for (String key : headers.keySet()) {
+            if (key != null && key.equalsIgnoreCase(name)) return true;
+        }
+        return false;
     }
 
     // The ORDERED CHAIN [{provider, model}, ...] assigned to the request's tier (primary +

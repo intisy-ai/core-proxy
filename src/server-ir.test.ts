@@ -8,6 +8,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createProxyServer } from "./server.js";
+import { HandleIrError } from "./types.js";
 import { translators } from "../core-ir/dist/index.js";
 import type { IrRequest, IrResponse, IrStreamEvent } from "../core-ir/dist/index.js";
 
@@ -118,6 +119,80 @@ it("legacy handle()-only handler still serves via the fallback, even though the 
   // Untranslated, verbatim legacy body -- proves the "no handleIr" fallback served this request
   // rather than attempting (and failing) to encode a raw Response through the IR.
   expect(await r.text()).toBe("served m-legacy");
+});
+
+// T3c-1: a thrown HandleIrError must reconstruct a real Response and flow through the SAME
+// isRateLimited/rateLimitResetMs/fallback/final-429-synthesis logic as a legacy handle() response,
+// instead of collapsing to a flat 502 (which lost status fidelity and broke rate-limit fallback).
+it("handleIr throwing a 429-typed HandleIrError triggers fallback, then synthesizes a final 429 once every entry is exhausted", async () => {
+  writeFileSync(
+    join(dir, "config", "claude-code-loader.json"),
+    JSON.stringify({ modelMap: { opus: [{ provider: "primary", model: "m-primary" }, { provider: "fallback", model: "m-fallback" }] } })
+  );
+  const handlers: any = {
+    primary: {
+      handle: async () => { throw new Error("legacy handle() must not be called when the IR path is taken"); },
+      handleIr: async () => { throw new HandleIrError({ status: 429, body: JSON.stringify({ type: "error" }), retryAfterMs: 5000 }); },
+    },
+    fallback: {
+      handle: async () => { throw new Error("legacy handle() must not be called when the IR path is taken"); },
+      handleIr: async () => { throw new HandleIrError({ status: 429, body: JSON.stringify({ type: "error" }) }); },
+    },
+  };
+  srv = createProxyServer({ configDir: dir, profile, port: 0, resolveHandler: async (n) => handlers[n] ?? null });
+  port = await srv.listen();
+
+  const r = await fetch(`http://127.0.0.1:${port}/v1/messages`, { method: "POST", body: wireRequest });
+  expect(r.status).toBe(429);
+  // Body comes from profile.nativeRateLimit's final synthesis -- proves the fallback + final-429
+  // path ran, not the flat 502 error shape.
+  const body = await r.json();
+  expect(body.error.type).toBe("rate_limit_error");
+});
+
+it("handleIr throwing a 400-typed HandleIrError surfaces verbatim, with no fallback attempted", async () => {
+  writeFileSync(
+    join(dir, "config", "claude-code-loader.json"),
+    JSON.stringify({ modelMap: { opus: [{ provider: "primary", model: "m-primary" }, { provider: "fallback", model: "m-fallback" }] } })
+  );
+  let fallbackCalled = false;
+  const handlers: any = {
+    primary: {
+      handle: async () => { throw new Error("legacy handle() must not be called when the IR path is taken"); },
+      handleIr: async () => {
+        throw new HandleIrError({ status: 400, body: JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "bad request" } }) });
+      },
+    },
+    fallback: {
+      handle: async () => { throw new Error("legacy handle() must not be called when the IR path is taken"); },
+      handleIr: async () => { fallbackCalled = true; throw new Error("fallback must never be attempted for a non-rate-limit error"); },
+    },
+  };
+  srv = createProxyServer({ configDir: dir, profile, port: 0, resolveHandler: async (n) => handlers[n] ?? null });
+  port = await srv.listen();
+
+  const r = await fetch(`http://127.0.0.1:${port}/v1/messages`, { method: "POST", body: wireRequest });
+  expect(r.status).toBe(400);
+  const body = await r.json();
+  expect(body.error.type).toBe("invalid_request_error");
+  expect(fallbackCalled).toBe(false);
+});
+
+it("handleIr throwing a plain non-typed error still collapses to a flat 502, unchanged", async () => {
+  writeFileSync(join(dir, "config", "claude-code-loader.json"), JSON.stringify({ modelMap: { opus: [{ provider: "ok", model: "m-ok" }] } }));
+  const handlers: any = {
+    ok: {
+      handle: async () => { throw new Error("legacy handle() must not be called when the IR path is taken"); },
+      handleIr: async () => { throw new Error("boom"); },
+    },
+  };
+  srv = createProxyServer({ configDir: dir, profile, port: 0, resolveHandler: async (n) => handlers[n] ?? null });
+  port = await srv.listen();
+
+  const r = await fetch(`http://127.0.0.1:${port}/v1/messages`, { method: "POST", body: wireRequest });
+  expect(r.status).toBe(502);
+  const body = await r.json();
+  expect(body.error.type).toBe("loader_proxy_error");
 });
 
 it("no translator on the profile never attempts the IR path, even for a handleIr-capable handler", async () => {

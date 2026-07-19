@@ -25,9 +25,41 @@ export type ProxyHandler = {
    * the inbound request into IR (via RoutingProfile.translator) and encoding the result back to
    * the app's wire format. Optional: a legacy handler simply omits it, and the server falls back
    * to calling `handle` unchanged (coexist-then-remove, per the canonical IR design doc).
+   *
+   * On a non-2xx upstream outcome a handleIr implementation throws `HandleIrError` (see below)
+   * rather than returning it as data, so the front door can still route on it (T3c-2 makes
+   * providers do this; this type only defines the contract).
    */
   handleIr?: (ir: IrRequest, ctx: HandlerCtx) => Promise<IrResponse | IrEventStream>;
 };
+
+/**
+ * T3c-1: the typed transport error a `handleIr` implementation throws for a non-2xx upstream
+ * outcome (rate limit, bad request, etc.), carrying exactly what the legacy `handle()` path's
+ * real Response carried -- status/headers/body -- so the front door (server.ts route()) can
+ * reconstruct an equivalent Response and feed it through the SAME isRateLimited/rateLimitResetMs/
+ * fallback/final-429-synthesis logic used for a legacy Response, instead of collapsing every
+ * throw to a flat 502 (which lost status fidelity and broke rate-limit fallback). A throw that is
+ * NOT a HandleIrError is a genuine unexpected failure and stays a flat 502, unchanged.
+ */
+export class HandleIrError extends Error {
+  status: number;
+  headers?: Record<string, string>;
+  body: string;
+  /** Optional convenience: when set and no x-hub-retry-after-ms header is already present,
+   *  server.ts injects it so rateLimitResetMs can compute the reset time without the thrower
+   *  having to know the header name. */
+  retryAfterMs?: number;
+
+  constructor(init: { status: number; headers?: Record<string, string>; body: string; retryAfterMs?: number }) {
+    super("handleIr transport error: " + init.status);
+    this.name = "HandleIrError";
+    this.status = init.status;
+    this.headers = init.headers;
+    this.body = init.body;
+    this.retryAfterMs = init.retryAfterMs;
+  }
+}
 
 export type HandlerResolver = (providerName: string) => Promise<ProxyHandler | null>;
 

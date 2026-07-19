@@ -6,6 +6,7 @@ import io.github.intisy.ai.ir.IrResponse;
 import io.github.intisy.ai.ir.TextBlock;
 import io.github.intisy.ai.ir.spi.Translator;
 import io.github.intisy.ai.ir.translators.anthropic.AnthropicTranslator;
+import io.github.intisy.ai.shared.routing.HandleIrException;
 import io.github.intisy.ai.shared.routing.HandlerCtx;
 import io.github.intisy.ai.shared.routing.HandlerResolver;
 import io.github.intisy.ai.shared.routing.Provider;
@@ -17,12 +18,15 @@ import io.github.intisy.ai.shared.spi.http.HttpResponse;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -145,6 +149,35 @@ class IrRouterTest {
         }
     }
 
+    /** An IR-native provider whose handleIr always throws (either a {@link HandleIrException} or
+     *  a plain exception, per the test), proving the Router's typed-vs-unexpected-throw handling. */
+    private static final class ThrowingIrProvider implements Provider {
+        private final String id;
+        private final Exception toThrow;
+        final AtomicBoolean called = new AtomicBoolean(false);
+
+        ThrowingIrProvider(String id, Exception toThrow) {
+            this.id = id;
+            this.toThrow = toThrow;
+        }
+
+        @Override
+        public String id() {
+            return id;
+        }
+
+        @Override
+        public HttpResponse handle(HttpRequest req, HandlerCtx ctx) {
+            throw new AssertionError("legacy handle() must not be called when the IR path is taken");
+        }
+
+        @Override
+        public IrResponse handleIr(IrRequest request, HandlerCtx ctx) throws Exception {
+            called.set(true);
+            throw toThrow;
+        }
+    }
+
     private static Translator anthropicTranslator() {
         return new AnthropicTranslator(new IrJsonCodecAdapter(new TestJsonCodec()));
     }
@@ -189,6 +222,76 @@ class IrRouterTest {
         // Untranslated, verbatim legacy body -- proves the UnsupportedOperationException fallback
         // reached handle() rather than trying (and failing) to encode anything through the IR.
         assertEquals("served m-legacy", resp.body);
+    }
+
+    // T3c-1: a thrown HandleIrException must reconstruct a real HttpResponse and flow through the
+    // SAME RateLimit.isRateLimited/fallback/final-429-synthesis logic as a legacy handle() response,
+    // instead of collapsing to a flat 502 (which lost status fidelity and broke rate-limit fallback).
+    @Test
+    void handleIrThrows429TypedException_triggersFallback_thenSynthesizesFinal429() {
+        InMemoryStore store = new InMemoryStore();
+        store.put(CONFIG_FILE, "{\"modelMap\":{\"opus\":["
+                + "{\"provider\":\"primary\",\"model\":\"m-primary\"},"
+                + "{\"provider\":\"fallback\",\"model\":\"m-fallback\"}]}}");
+        RoutingProfile profile = testProfile(anthropicTranslator());
+        ThrowingIrProvider primary = new ThrowingIrProvider("primary",
+                new HandleIrException(429, new HashMap<>(), "{\"type\":\"error\"}", 5000L));
+        ThrowingIrProvider fallback = new ThrowingIrProvider("fallback",
+                new HandleIrException(429, new HashMap<>(), "{\"type\":\"error\"}"));
+        HandlerResolver resolver = HandlerResolvers.fromProviders(Arrays.<Provider>asList(primary, fallback));
+        RouterOptions opts = baseOptions(store, profile, resolver, List.of("primary", "fallback"));
+
+        String wireRequest = "{\"model\":\"claude-opus-4-1\",\"messages\":"
+                + "[{\"role\":\"user\",\"content\":\"hi there\"}],\"stream\":false}";
+        HttpResponse resp = Router.route(post("/v1/messages", wireRequest), opts);
+
+        assertTrue(primary.called.get());
+        assertTrue(fallback.called.get());
+        assertEquals(429, resp.status);
+        // Body comes from profile.nativeRateLimit's final synthesis -- proves the fallback +
+        // final-429 path ran, not the flat 502 error shape.
+        assertTrue(resp.body.contains("rate_limit_error"));
+    }
+
+    @Test
+    void handleIrThrows400TypedException_surfacesVerbatim_noFallbackAttempted() {
+        InMemoryStore store = new InMemoryStore();
+        store.put(CONFIG_FILE, "{\"modelMap\":{\"opus\":["
+                + "{\"provider\":\"primary\",\"model\":\"m-primary\"},"
+                + "{\"provider\":\"fallback\",\"model\":\"m-fallback\"}]}}");
+        RoutingProfile profile = testProfile(anthropicTranslator());
+        ThrowingIrProvider primary = new ThrowingIrProvider("primary",
+                new HandleIrException(400, new HashMap<>(), "{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\"}}"));
+        ThrowingIrProvider fallback = new ThrowingIrProvider("fallback",
+                new RuntimeException("fallback must never be attempted for a non-rate-limit error"));
+        HandlerResolver resolver = HandlerResolvers.fromProviders(Arrays.<Provider>asList(primary, fallback));
+        RouterOptions opts = baseOptions(store, profile, resolver, List.of("primary", "fallback"));
+
+        String wireRequest = "{\"model\":\"claude-opus-4-1\",\"messages\":"
+                + "[{\"role\":\"user\",\"content\":\"hi there\"}],\"stream\":false}";
+        HttpResponse resp = Router.route(post("/v1/messages", wireRequest), opts);
+
+        assertTrue(primary.called.get());
+        assertFalse(fallback.called.get());
+        assertEquals(400, resp.status);
+        assertTrue(resp.body.contains("invalid_request_error"));
+    }
+
+    @Test
+    void handleIrThrowsPlainException_stillCollapsesToFlat502_unchanged() {
+        InMemoryStore store = new InMemoryStore();
+        store.put(CONFIG_FILE, "{\"modelMap\":{\"opus\":[{\"provider\":\"ok\",\"model\":\"m-ok\"}]}}");
+        RoutingProfile profile = testProfile(anthropicTranslator());
+        ThrowingIrProvider ok = new ThrowingIrProvider("ok", new RuntimeException("boom"));
+        HandlerResolver resolver = HandlerResolvers.fromProviders(Collections.singletonList((Provider) ok));
+        RouterOptions opts = baseOptions(store, profile, resolver, List.of("ok"));
+
+        String wireRequest = "{\"model\":\"claude-opus-4-1\",\"messages\":"
+                + "[{\"role\":\"user\",\"content\":\"hi there\"}],\"stream\":false}";
+        HttpResponse resp = Router.route(post("/v1/messages", wireRequest), opts);
+
+        assertEquals(502, resp.status);
+        assertTrue(resp.body.contains("loader_proxy_error"));
     }
 
     @Test
