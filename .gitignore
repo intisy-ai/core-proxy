@@ -1,6 +1,11 @@
 node_modules/
 dist/
 
+# planning scratch, never committed
+docs/
+.superpowers/
+graphify-out/
+
 # java/ (Gradle + TeaVM module)
 java/**/build/
 java/.gradle/
