@@ -193,7 +193,7 @@ export function createProxyServer(opts: ProxyOptions): ProxyServer {
       let handler;
       try { handler = await opts.resolveHandler(assigned.provider); }
       catch (e) { log("handler load failed for " + assigned.provider + ": " + ((e as Error)?.message)); handler = null; }
-      if (!handler || typeof handler.handle !== "function") {
+      if (!handler || (typeof handler.handle !== "function" && typeof handler.handleIr !== "function")) {
         lastResp = errorResponse(503, "Provider '" + assigned.provider + "' has no proxy handler installed.");
         continue;
       }
@@ -225,7 +225,7 @@ export function createProxyServer(opts: ProxyOptions): ProxyServer {
             continue;
           }
         }
-      } else {
+      } else if (typeof handler.handle === "function") {
         try {
           resp = await handler.handle(request, ctx);
         } catch (e) {
@@ -233,6 +233,13 @@ export function createProxyServer(opts: ProxyOptions): ProxyServer {
           lastResp = errorResponse(502, "Provider handler failed: " + ((e as Error)?.message));
           continue;
         }
+      } else {
+        // An IR-native handler (handleIr only) reached with no IR to run: this profile supplied no
+        // translator, so route() never decoded an IrRequest. There is no legacy handle() to fall
+        // back to. A correctly-configured app-proxy always pairs an IR-native provider with a
+        // translator, so this is a misconfiguration, surfaced rather than crashing on undefined.
+        lastResp = errorResponse(503, "Provider '" + assigned.provider + "' is IR-native but this profile has no translator to decode the request.");
+        continue;
       }
       lastResp = resp;
       if (isRateLimited(resp)) {

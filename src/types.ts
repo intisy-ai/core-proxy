@@ -17,20 +17,27 @@ export type HandlerCtx = {
 export type IrEventStream = ReadableStream<IrStreamEvent>;
 
 export type ProxyHandler = {
-  handle: (request: Request, ctx: HandlerCtx) => Promise<Response>;
   /**
-   * SP-3 IR-native alternative to `handle`: receives an already app-wire-decoded IrRequest and
-   * returns an IrResponse (non-streaming) or an IrEventStream (streaming), with zero app-wire
-   * format knowledge in the handler itself -- the front-door (server.ts route()) owns decoding
-   * the inbound request into IR (via RoutingProfile.translator) and encoding the result back to
-   * the app's wire format. Optional: a legacy handler simply omits it, and the server falls back
-   * to calling `handle` unchanged (coexist-then-remove, per the canonical IR design doc).
+   * IR-native entry point (SP-3, the layering flip): receives an already app-wire-decoded IrRequest
+   * and returns an IrResponse (non-streaming) or an IrEventStream (streaming), with zero app-wire
+   * format knowledge in the handler itself -- the front-door (server.ts route()) owns decoding the
+   * inbound request into IR (via RoutingProfile.translator) and encoding the result back to the
+   * app's wire format. This is the contract every ecosystem provider implements post-T4.
    *
    * On a non-2xx upstream outcome a handleIr implementation throws `HandleIrError` (see below)
-   * rather than returning it as data, so the front door can still route on it (T3c-2 makes
-   * providers do this; this type only defines the contract).
+   * rather than returning it as data, so the front door can still route on it (rate-limit fallback,
+   * verbatim 4xx). A handler supplies handleIr, the legacy `handle`, or both -- the gate in route()
+   * requires at least one.
    */
   handleIr?: (ir: IrRequest, ctx: HandlerCtx) => Promise<IrResponse | IrEventStream>;
+  /**
+   * Legacy app-wire entry point: the front-door hands it the raw inbound Request and expects a wire
+   * Response. Optional -- an IR-native handler omits it entirely (providers do post-T4). The generic
+   * engine keeps calling it for a handler that supplies only `handle` (e.g. a profile with no
+   * translator), so a non-IR app-proxy remains possible; it is never an app-specific trace in a
+   * provider, only an engine capability.
+   */
+  handle?: (request: Request, ctx: HandlerCtx) => Promise<Response>;
 };
 
 /**

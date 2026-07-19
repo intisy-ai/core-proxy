@@ -2,6 +2,8 @@ package io.github.intisy.ai.shared.routing;
 
 import io.github.intisy.ai.ir.IrRequest;
 import io.github.intisy.ai.ir.IrResponse;
+import io.github.intisy.ai.shared.spi.http.HttpRequest;
+import io.github.intisy.ai.shared.spi.http.HttpResponse;
 
 /**
  * Runtime extension point that a provider module implements to serve one provider id's
@@ -44,5 +46,18 @@ public interface Provider extends ProxyHandler {
      */
     default IrResponse handleIr(IrRequest request, HandlerCtx ctx) throws Exception {
         throw new UnsupportedOperationException(id() + " has no handleIr — legacy handle() only");
+    }
+
+    /**
+     * Legacy app-wire entry point inherited from {@link ProxyHandler}. Post-T4 an IR-native provider
+     * no longer implements it — the front-door (Router/proxy server) owns app&lt;-&gt;IR translation, so
+     * the provider has no app-wire format knowledge at all. This default throws so such a provider
+     * satisfies the {@link ProxyHandler} contract without carrying any wire code; the Router only
+     * reaches it when a profile supplies no translator (no IR to run) AND the provider is legacy
+     * (overrides this), which the ecosystem's providers never are. A legacy handle()-only provider
+     * still works by overriding this (see the Router's UnsupportedOperationException fallback).
+     */
+    default HttpResponse handle(HttpRequest req, HandlerCtx ctx) throws Exception {
+        throw new UnsupportedOperationException(id() + " is IR-native — call handleIr, not handle");
     }
 }
