@@ -32,7 +32,10 @@ export function makeDynamicResolver(
       handlerCache[providerName] = { path, mtime, mod };
     }
 
-    const handle = (mod as { handle?: unknown }).handle;
-    return typeof handle === "function" ? { handle: handle as ProxyHandler["handle"] } : null;
+    const m = mod as { handle?: unknown; handleIr?: unknown };
+    const out: ProxyHandler = {};
+    if (typeof m.handle === "function") out.handle = m.handle as ProxyHandler["handle"];
+    if (typeof m.handleIr === "function") out.handleIr = m.handleIr as ProxyHandler["handleIr"];
+    return out.handle || out.handleIr ? out : null;
   };
 }

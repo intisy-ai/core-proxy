@@ -39,3 +39,20 @@ it("re-imports the handler when its mtime moves (cache invalidation)", async () 
   const r2 = await second!.handle(new Request("http://x/v1/messages"), { configDir: dir, log: () => {}, model: "m1" });
   expect(await r2.text()).toBe("bye m1");
 });
+
+it("resolves a provider that exports only handleIr", async () => {
+  const irOnlyPath = join(dir, "handler-ir.mjs");
+  writeFileSync(irOnlyPath, `export async function handleIr(ir, ctx){ return { role: "assistant", content: [] }; }`);
+  const resolve = makeDynamicResolver(() => [{ provider: "ir-demo", handlerPath: irOnlyPath }]);
+  const handler = await resolve("ir-demo");
+  expect(handler).not.toBeNull();
+  expect(typeof handler!.handleIr).toBe("function");
+  expect(handler!.handle).toBeUndefined();
+});
+
+it("returns null when a module exports neither handle nor handleIr", async () => {
+  const neitherPath = join(dir, "handler-neither.mjs");
+  writeFileSync(neitherPath, `export const somethingElse = 42;`);
+  const resolve = makeDynamicResolver(() => [{ provider: "neither-demo", handlerPath: neitherPath }]);
+  expect(await resolve("neither-demo")).toBeNull();
+});
