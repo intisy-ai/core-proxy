@@ -2,8 +2,6 @@
 // to its tier in the loader config, falling back through the chain on rate-limit and synthesizing a
 // native 429 once every entry is exhausted, parameterized by ProxyOptions.
 
-import { existsSync, mkdirSync, appendFileSync } from "node:fs";
-import { join } from "node:path";
 import { createServer, type Server } from "node:http";
 import { Readable } from "node:stream";
 import { resolveModelMap, catalogEntries } from "./model-map.js";
@@ -73,23 +71,19 @@ export function createProxyServer(opts: ProxyOptions): ProxyServer {
   const port = opts.port ?? 34567;
   const log = opts.log ?? (() => {});
 
-  // User-visible, non-intrusive notice: append to core-auth's notification queue, which the
-  // loader's PostToolUse hook drains into a systemMessage. The user must never be silently switched
-  // to a different model/provider than requested.
+  // User-visible, non-intrusive notice that the request was routed to a different
+  // model/provider than asked for. The host owns delivery: it injects opts.notify to
+  // put the message on the shared event bus (the loader's drain surfaces it to the
+  // user). Identical messages are throttled so a burst of fallbacks notifies once.
   const NOTIFY_INTERVAL_MS = 60000;
   const lastNotified: Record<string, number> = {};
-  const defaultNotify = (message: string, level?: string) => {
-    try {
-      const now = Date.now();
-      if (lastNotified[message] && now - lastNotified[message] < NOTIFY_INTERVAL_MS) return;
-      lastNotified[message] = now;
-      const dir = join(configDir, "cache");
-      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-      appendFileSync(join(dir, "auth-notifications.jsonl"), JSON.stringify({ message, level: level || "warning", at: now }) + "\n");
-      log("notify: " + message);
-    } catch {}
+  const notify = (message: string, level?: string) => {
+    const now = Date.now();
+    if (lastNotified[message] && now - lastNotified[message] < NOTIFY_INTERVAL_MS) return;
+    lastNotified[message] = now;
+    log("notify: " + message);
+    try { opts.notify?.(message, level); } catch {}
   };
-  const notify = opts.notify ?? defaultNotify;
 
   // The ordered chain [{provider, model}, ...] assigned to the request's tier (primary +
   // fallbacks). Stale/unset tiers auto-derive to the current catalog, so routing tracks a model
