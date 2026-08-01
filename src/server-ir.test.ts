@@ -53,7 +53,7 @@ it("decodes app wire -> IR, routes, calls handleIr, and encodes the IrResponse b
         return {
           id: "msg_echo",
           model: ctx.model,
-          content: [{ kind: "text", text: "handled via IR: " + userText }],
+          content: [{ kind: "text", text: "handled via IR (" + ctx.provider + "): " + userText }],
           stopReason: "end_turn",
           usage: { inputTokens: 5, outputTokens: 5 },
         };
@@ -69,7 +69,7 @@ it("decodes app wire -> IR, routes, calls handleIr, and encodes the IrResponse b
   const decoded = await translators.anthropic.decodeResponse(wireBody);
   expect(decoded.model).toBe("m-ok"); // ctx.model is the assigned model, matching the handle() contract
   expect(decoded.stopReason).toBe("end_turn");
-  expect(decoded.content[0]).toMatchObject({ kind: "text", text: "handled via IR: hi there" });
+  expect(decoded.content[0]).toMatchObject({ kind: "text", text: "handled via IR (ok): hi there" });
 });
 
 it("streams: an IR event stream from handleIr is encoded to real Anthropic SSE, chunk by chunk", async () => {

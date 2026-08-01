@@ -9,6 +9,9 @@ export type HandlerCtx = {
   configDir: string;
   log: (m: string) => void;
   model: string;
+  // The resolved provider id serving this request. A handler backing several providers
+  // (e.g. a shared account pool with distinct upstream lanes) reads it to pick the lane.
+  provider: string;
 };
 
 // A stream of canonical IR events produced directly by a provider's handleIr, not vendor SSE

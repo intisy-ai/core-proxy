@@ -187,7 +187,7 @@ export function createProxyServer(opts: ProxyOptions): ProxyServer {
         lastResp = errorResponse(503, "Provider '" + assigned.provider + "' has no proxy handler installed.");
         continue;
       }
-      const ctx = { configDir, log, model: assigned.model };
+      const ctx = { configDir, log, model: assigned.model, provider: assigned.provider };
       let resp: Response;
       // Prefer the IR path when both sides support it: this profile decoded an IR request and the
       // resolved handler exposes handleIr. A handler with no handleIr, or a profile with no
