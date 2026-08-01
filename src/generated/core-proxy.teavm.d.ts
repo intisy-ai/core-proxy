@@ -1,7 +1,7 @@
 // Hand-authored ambient types for the TeaVM-generated ES module staged into this same directory
 // by `npm run build:teavm` (teavm-build.mjs), from java/teavm's CoreProxyJs @JSExport surface. The
 // generated core-proxy.teavm.js itself is gitignored (build output); this .d.ts is committed source
-// so tsc can type-check consumers of `loadCoreProxy()` without needing the build to have run first.
+// so tsc can type-check consumers of `getCoreProxy()` without needing the build to have run first.
 
 /** Live JS-backed store: `get`/`put`/`exists`/`delete`/`listKeys`, all synchronous. */
 export interface CoreProxyJsStore {
