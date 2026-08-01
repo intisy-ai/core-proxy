@@ -99,7 +99,7 @@ export function createProxyServer(opts: ProxyOptions): ProxyServer {
   // IrRequest.model, the neutral field name shared by every vendor's IR, rather than re-parsing
   // vendor-specific wire JSON.
   async function resolveAssignmentForModel(requested: string): Promise<Chain> {
-    const map = resolveModelMap(configDir, opts.profile);
+    const map = await resolveModelMap(configDir, opts.profile);
     // Exact-id match first: the wrapper injects each tier's primary model id as an env var, so the
     // request model can be a backend id carrying no tier keyword; recover its tier by matching the
     // assigned ids before keyword classification.

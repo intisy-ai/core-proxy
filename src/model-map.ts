@@ -2,11 +2,26 @@
 // (display), and the wrapper (model env injection). Self-heals: a stored mapping whose model no
 // longer exists in the live catalog (e.g. after a model refresh) is auto-re-derived to the current
 // best model for that tier, so the mapping tracks the app's models without the user re-assigning.
-// Pure fs/path only.
+// fs/path reads stay here; the pure tier-detect and heal/derive resolution is delegated to
+// CoreProxyJs (ModelMap.java, single source shared with the JVM backend).
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { loadCoreProxy } from "./index.js";
 import type { Assignment, CatalogEntry, Chain, ModelMap, RoutingProfile } from "./types.js";
+
+// Only the DATA fields CoreProxyJs.profileFromJson reads; RoutingProfile also carries functions
+// (nativeRateLimit, translator) that never cross the JSON boundary.
+function profileToJson(profile: RoutingProfile) {
+  return {
+    configFile: profile.configFile,
+    tierSourceProvider: profile.tierSourceProvider,
+    tierOrder: profile.tierOrder,
+    tierFallback: profile.tierFallback,
+    tierRegex: profile.tierRegex.source,
+    envPrefix: profile.envPrefix,
+  };
+}
 
 function configFolder(configDir: string): string {
   return join(configDir, "config");
@@ -31,22 +46,12 @@ function modelCache(configDir: string): ModelCacheMap {
 // Tiers are detected from the tier-source provider's catalog (family token of each model id, via
 // profile.tierRegex, e.g. claude-fable-5 -> "fable"), so new families appear as mapping slots
 // automatically. profile.tierOrder keeps known families in a familiar order; profile.tierFallback
-// covers pre-login (no catalog yet).
-export function claudeTiers(configDir: string, profile: RoutingProfile): string[] {
-  const cc = modelCache(configDir)[profile.tierSourceProvider];
-  const ids = cc && cc.ranking && cc.ranking.length ? cc.ranking : Object.keys(cc?.models || {});
-  const tiers: string[] = [];
-  for (const id of ids) {
-    const m = profile.tierRegex.exec(String(id));
-    if (m && !tiers.includes(m[1])) tiers.push(m[1]);
-  }
-  if (!tiers.length) return profile.tierFallback.slice();
-  tiers.sort((a, b) => {
-    const ia = profile.tierOrder.indexOf(a);
-    const ib = profile.tierOrder.indexOf(b);
-    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
-  });
-  return tiers;
+// covers pre-login (no catalog yet). Delegates to CoreProxyJs.resolveTiersJson (ModelMap.resolveTiers).
+export async function claudeTiers(configDir: string, profile: RoutingProfile): Promise<string[]> {
+  const storeJson = JSON.stringify({ "models.json": JSON.stringify(modelCache(configDir)) });
+  const profileJson = JSON.stringify(profileToJson(profile));
+  const core = await loadCoreProxy();
+  return JSON.parse(core.resolveTiersJson(profileJson, storeJson)) as string[];
 }
 
 export function readModelMap(configDir: string, profile: RoutingProfile): Record<string, unknown> {
@@ -117,54 +122,25 @@ export function normalizeChain(raw: unknown): Chain {
 // the tier-source provider and then gate on its accounts). When the chosen provider has no catalog
 // at all, the stored entry passes through untouched (the catalog may simply not be fetched yet; if
 // the model is really gone the provider reports its own clear error). Only a tier with no stored
-// choice derives from the whole catalog. "-auto" ids skipped.
-export function resolveModelMap(configDir: string, profile: RoutingProfile): ModelMap {
-  const stored = readModelMap(configDir, profile);
-  const catalog = catalogEntries(configDir).filter((e) => !/-auto$/.test(e.model));
-  const has = (provider: string, model: string) => catalog.some((e) => e.provider === provider && e.model === model);
-  const nameOf = (provider: string, model: string) => {
-    const m = catalog.find((e) => e.provider === provider && e.model === model);
-    return (m && m.name) || model;
-  };
-  const deriveIn = (entries: CatalogEntry[], keyword: string | null) =>
-    entries.find((e) => keyword && e.model.toLowerCase().indexOf(keyword) >= 0) || null;
-
-  const pick = (slot: string, keyword: string | null): Chain => {
-    const chain = normalizeChain(stored[slot]);
-    const out: Chain = [];
-    for (const e of chain) {
-      const providerKnown = catalog.some((c) => c.provider === e.provider);
-      if (has(e.provider, e.model)) out.push({ provider: e.provider, model: e.model, name: nameOf(e.provider, e.model), derived: false });
-      else if (!providerKnown) out.push({ provider: e.provider, model: e.model, name: e.model, derived: false });
-    }
-    if (out.length) return out;
-    // Whole chain stale: heal within the chosen provider (only its model id changed);
-    // cross-provider derivation is reserved for unset tiers, preferring the tier-source provider
-    // (the app's own models are the natural default).
-    const preferred = chain[0] && chain[0].provider;
-    if (preferred) {
-      const d = deriveIn(catalog.filter((e) => e.provider === preferred), keyword);
-      return d ? [{ provider: d.provider, model: d.model, name: nameOf(d.provider, d.model), derived: true }] : [];
-    }
-    const d = deriveIn(catalog.filter((e) => e.provider === profile.tierSourceProvider), keyword) || deriveIn(catalog, keyword);
-    return d ? [{ provider: d.provider, model: d.model, name: nameOf(d.provider, d.model), derived: true }] : [];
-  };
-
-  const eff: Record<string, Chain> = {};
-  const tiers = claudeTiers(configDir, profile);
-  for (const tier of tiers) eff[tier] = pick(tier, tier);
-  const dflt = pick("default", null);
-  const first = tiers.find((t) => (eff[t] || []).length);
-  eff.default = dflt.length ? dflt : first ? eff[first].map((e) => ({ ...e, derived: true })) : [];
-  return eff as ModelMap;
+// choice derives from the whole catalog. "-auto" ids skipped. Delegates to
+// CoreProxyJs.resolveModelMapJson (ModelMap.resolveModelMap), seeded with the raw models.json cache
+// and the stored mapping file, exactly as they sit on disk.
+export async function resolveModelMap(configDir: string, profile: RoutingProfile): Promise<ModelMap> {
+  const storeJson = JSON.stringify({
+    "models.json": JSON.stringify(modelCache(configDir)),
+    [profile.configFile]: JSON.stringify({ modelMap: readModelMap(configDir, profile) }),
+  });
+  const profileJson = JSON.stringify(profileToJson(profile));
+  const core = await loadCoreProxy();
+  return JSON.parse(core.resolveModelMapJson(profileJson, storeJson)) as ModelMap;
 }
 
 // {key,value} env pairs the wrapper exports so the app's /model shows the mapped models as custom
 // tier entries (real names via *_NAME) and uses the default tier as the session default. Values
 // (display names) can contain spaces/parens, so the caller quotes per shell, hence pairs, not
 // pre-joined lines.
-export function modelEnvPairs(configDir: string, profile: RoutingProfile): { key: string; value: string }[] {
-  const eff = resolveModelMap(configDir, profile);
+export async function modelEnvPairs(configDir: string, profile: RoutingProfile): Promise<{ key: string; value: string }[]> {
+  const eff = await resolveModelMap(configDir, profile);
   const pairs: { key: string; value: string }[] = [];
   for (const tier of Object.keys(eff)) {
     if (tier === "default") continue;
