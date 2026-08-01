@@ -11,7 +11,7 @@
   "files": ["dist/", "README.md", "LICENSE"],
   "engines": { "node": ">=20.0.0" },
   "scripts": {
-    "build": "npm --prefix core-ir install && npm --prefix core-ir run build && npm run build:teavm && tsc",
+    "build": "npm --prefix core-ir install && npm --prefix core-ir run build && npm run build:teavm && tsc && node copy-generated.mjs",
     "build:teavm": "node teavm-build.mjs --java-dir java --module :teavm --out src/generated/core-proxy.teavm.js",
     "test": "vitest run",
     "prepublishOnly": "npm run build"
