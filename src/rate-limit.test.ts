@@ -1,6 +1,9 @@
-import { expect, it } from "vitest";
+import { beforeAll, expect, it } from "vitest";
+import { initCoreProxy } from "./core-proxy-loader.js";
 import { isRateLimited, rateLimitResetMs, rateLimitFinal } from "./rate-limit.js";
 import type { RoutingProfile } from "./types.js";
+
+beforeAll(() => initCoreProxy());
 
 // Mirrors the real profile's ownership of synthesized headers: the engine overlays nothing, so the
 // profile copies the upstream 429's own headers into its output itself, plus its own x-test marker.
@@ -22,13 +25,11 @@ it("isRateLimited: 429 or x-hub-rate-limited header", () => {
   expect(isRateLimited(new Response("", { status: 200 }))).toBe(false);
 });
 
-it("rateLimitResetMs: prefers x-hub-retry-after-ms, else retry-after seconds", async () => {
+it("rateLimitResetMs: prefers x-hub-retry-after-ms, else retry-after seconds", () => {
   const now = 1_000_000;
-  expect(await rateLimitResetMs(new Response("", { headers: { "x-hub-retry-after-ms": "5000" } }), now)).toBe(
-    now + 5000
-  );
-  expect(await rateLimitResetMs(new Response("", { headers: { "retry-after": "2" } }), now)).toBe(now + 2000);
-  expect(await rateLimitResetMs(new Response("", {}), now)).toBe(0);
+  expect(rateLimitResetMs(new Response("", { headers: { "x-hub-retry-after-ms": "5000" } }), now)).toBe(now + 5000);
+  expect(rateLimitResetMs(new Response("", { headers: { "retry-after": "2" } }), now)).toBe(now + 2000);
+  expect(rateLimitResetMs(new Response("", {}), now)).toBe(0);
 });
 
 // Frozen parity matrix: locks the TS behavior before/after delegating the arithmetic to
@@ -44,9 +45,9 @@ const rateLimitResetMsCases: Array<[Record<string, string>, number]> = [
   [{ "x-hub-retry-after-ms": "5000abc" }, NOW + 5000],
   [{ "retry-after": "-5" }, 0],
 ];
-it.each(rateLimitResetMsCases)("rateLimitResetMs parity %o -> %i", async (headers, expected) => {
+it.each(rateLimitResetMsCases)("rateLimitResetMs parity %o -> %i", (headers, expected) => {
   const resp = new Response(null, { headers });
-  expect(await rateLimitResetMs(resp, NOW)).toBe(expected);
+  expect(rateLimitResetMs(resp, NOW)).toBe(expected);
 });
 
 it("rateLimitFinal: builds via profile.nativeRateLimit", async () => {

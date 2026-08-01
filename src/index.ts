@@ -1,13 +1,4 @@
-// Lazily-memoized dynamic import of the TeaVM ESM -- staged to src/generated/ by
-// `npm run build:teavm` ahead of tsc.
-let coreProxyModulePromise: Promise<typeof import("./generated/core-proxy.teavm.js")> | null = null;
-
-export function loadCoreProxy(): Promise<typeof import("./generated/core-proxy.teavm.js")> {
-  if (!coreProxyModulePromise) {
-    coreProxyModulePromise = import("./generated/core-proxy.teavm.js");
-  }
-  return coreProxyModulePromise;
-}
+export { initCoreProxy, getCoreProxy } from "./core-proxy-loader.js";
 
 export type {
   HandlerCtx,

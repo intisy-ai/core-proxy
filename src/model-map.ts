@@ -7,7 +7,7 @@
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { loadCoreProxy } from "./index.js";
+import { getCoreProxy } from "./core-proxy-loader.js";
 import type { Assignment, CatalogEntry, Chain, ModelMap, RoutingProfile } from "./types.js";
 
 // Only the DATA fields CoreProxyJs.profileFromJson reads; RoutingProfile also carries functions
@@ -47,10 +47,10 @@ function modelCache(configDir: string): ModelCacheMap {
 // profile.tierRegex, e.g. claude-fable-5 -> "fable"), so new families appear as mapping slots
 // automatically. profile.tierOrder keeps known families in a familiar order; profile.tierFallback
 // covers pre-login (no catalog yet). Delegates to CoreProxyJs.resolveTiersJson (ModelMap.resolveTiers).
-export async function claudeTiers(configDir: string, profile: RoutingProfile): Promise<string[]> {
+export function claudeTiers(configDir: string, profile: RoutingProfile): string[] {
   const storeJson = JSON.stringify({ "models.json": JSON.stringify(modelCache(configDir)) });
   const profileJson = JSON.stringify(profileToJson(profile));
-  const core = await loadCoreProxy();
+  const core = getCoreProxy();
   return JSON.parse(core.resolveTiersJson(profileJson, storeJson)) as string[];
 }
 
@@ -123,15 +123,19 @@ export function normalizeChain(raw: unknown): Chain {
 // at all, the stored entry passes through untouched (the catalog may simply not be fetched yet; if
 // the model is really gone the provider reports its own clear error). Only a tier with no stored
 // choice derives from the whole catalog. "-auto" ids skipped. Delegates to
-// CoreProxyJs.resolveModelMapJson (ModelMap.resolveModelMap), seeded with the raw models.json cache
-// and the stored mapping file, exactly as they sit on disk.
-export async function resolveModelMap(configDir: string, profile: RoutingProfile): Promise<ModelMap> {
+// CoreProxyJs.resolveModelMapJson (ModelMap.resolveModelMap), seeded with the stored mapping file and
+// the full catalogEntries() output (declared authProviders plus their cached or static models), so
+// the Java side resolves over the identical catalog this function has always built from disk.
+export function resolveModelMap(configDir: string, profile: RoutingProfile): ModelMap {
   const storeJson = JSON.stringify({
+    // read by ModelMap.resolveTiers internally, to detect the tier list from the tier-source
+    // provider's cached ranking
     "models.json": JSON.stringify(modelCache(configDir)),
     [profile.configFile]: JSON.stringify({ modelMap: readModelMap(configDir, profile) }),
+    catalog: JSON.stringify(catalogEntries(configDir)),
   });
   const profileJson = JSON.stringify(profileToJson(profile));
-  const core = await loadCoreProxy();
+  const core = getCoreProxy();
   return JSON.parse(core.resolveModelMapJson(profileJson, storeJson)) as ModelMap;
 }
 
@@ -139,8 +143,8 @@ export async function resolveModelMap(configDir: string, profile: RoutingProfile
 // tier entries (real names via *_NAME) and uses the default tier as the session default. Values
 // (display names) can contain spaces/parens, so the caller quotes per shell, hence pairs, not
 // pre-joined lines.
-export async function modelEnvPairs(configDir: string, profile: RoutingProfile): Promise<{ key: string; value: string }[]> {
-  const eff = await resolveModelMap(configDir, profile);
+export function modelEnvPairs(configDir: string, profile: RoutingProfile): { key: string; value: string }[] {
+  const eff = resolveModelMap(configDir, profile);
   const pairs: { key: string; value: string }[] = [];
   for (const tier of Object.keys(eff)) {
     if (tier === "default") continue;

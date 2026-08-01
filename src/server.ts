@@ -4,6 +4,7 @@
 
 import { createServer, type Server } from "node:http";
 import { Readable } from "node:stream";
+import { initCoreProxy } from "./core-proxy-loader.js";
 import { resolveModelMap, catalogEntries } from "./model-map.js";
 import { isRateLimited, rateLimitResetMs, rateLimitFinal } from "./rate-limit.js";
 import { isHandleIrError } from "./types.js";
@@ -99,7 +100,7 @@ export function createProxyServer(opts: ProxyOptions): ProxyServer {
   // IrRequest.model, the neutral field name shared by every vendor's IR, rather than re-parsing
   // vendor-specific wire JSON.
   async function resolveAssignmentForModel(requested: string): Promise<Chain> {
-    const map = await resolveModelMap(configDir, opts.profile);
+    const map = resolveModelMap(configDir, opts.profile);
     // Exact-id match first: the wrapper injects each tier's primary model id as an env var, so the
     // request model can be a backend id carrying no tier keyword; recover its tier by matching the
     // assigned ids before keyword classification.
@@ -151,6 +152,7 @@ export function createProxyServer(opts: ProxyOptions): ProxyServer {
   }
 
   async function route(request: Request): Promise<Response> {
+    await initCoreProxy();
     const url = new URL(request.url);
     if (url.pathname === "/health") return new Response("ok", { status: 200 });
     if (url.pathname === "/v1/models" || url.pathname.startsWith("/v1/models/")) return modelsResponse(url, configDir, opts.profile);
@@ -231,7 +233,7 @@ export function createProxyServer(opts: ProxyOptions): ProxyServer {
       }
       lastResp = resp;
       if (isRateLimited(resp)) {
-        const ms = await rateLimitResetMs(resp);
+        const ms = rateLimitResetMs(resp);
         if (ms > resetMs) resetMs = ms;
         log("rate-limited on " + assigned.provider + "/" + assigned.model + ", trying next fallback");
         continue;

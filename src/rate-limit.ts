@@ -1,4 +1,4 @@
-import { loadCoreProxy } from "./index.js";
+import { getCoreProxy } from "./core-proxy-loader.js";
 import type { RoutingProfile } from "./types.js";
 
 export function isRateLimited(resp: Response): boolean {
@@ -8,7 +8,7 @@ export function isRateLimited(resp: Response): boolean {
 // Earliest epoch-ms the response says it'll be usable again (x-hub-retry-after-ms, else retry-after
 // seconds). `now` defaults to Date.now() but is injectable for tests. Header extraction stays here;
 // the arithmetic is CoreProxyJs.rateLimitResetMsJson (single source, mirrors RateLimit.java).
-export async function rateLimitResetMs(resp: Response, now: number = Date.now()): Promise<number> {
+export function rateLimitResetMs(resp: Response, now: number = Date.now()): number {
   const args = {
     headers: {
       "x-hub-retry-after-ms": resp.headers.get("x-hub-retry-after-ms") || "",
@@ -16,7 +16,7 @@ export async function rateLimitResetMs(resp: Response, now: number = Date.now())
     },
     now,
   };
-  const core = await loadCoreProxy();
+  const core = getCoreProxy();
   return JSON.parse(core.rateLimitResetMsJson(JSON.stringify(args))) as number;
 }
 

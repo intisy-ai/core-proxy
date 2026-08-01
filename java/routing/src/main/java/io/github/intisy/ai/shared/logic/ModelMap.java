@@ -180,6 +180,52 @@ public final class ModelMap {
         return Collections.emptyList();
     }
 
+    // Store key CATALOG_KEY (JSON array of {provider,model,name,score,limit}) lets a caller supply
+    // the full pre-built catalog, in place of the models.json-only view cachedProviderIds/
+    // catalogEntries build. When absent, resolveModelMap falls back to its normal cachedProviderIds
+    // behavior unchanged, so a caller that never sets this key (e.g. the JVM backend) is unaffected.
+    private static final String CATALOG_KEY = "catalog";
+
+    @SuppressWarnings("unchecked")
+    private static List<CatalogEntry> catalogFromStoreKey(Store store, JsonCodec json) {
+        String raw;
+        try {
+            raw = store.get(CATALOG_KEY);
+        } catch (Exception e) {
+            return null;
+        }
+        if (raw == null) return null;
+        try {
+            Object parsed = json.parse(raw);
+            if (!(parsed instanceof List)) return null;
+            List<CatalogEntry> out = new ArrayList<>();
+            for (Object o : (List<?>) parsed) {
+                if (!(o instanceof Map)) continue;
+                Map<?, ?> m = (Map<?, ?>) o;
+                Object pv = m.get("provider");
+                Object mv = m.get("model");
+                if (!(pv instanceof String) || !(mv instanceof String)) continue;
+                Object nv = m.get("name");
+                String name = nv instanceof String ? (String) nv : null;
+                Object sv = m.get("score");
+                Double score = sv instanceof Number ? ((Number) sv).doubleValue() : null;
+                Integer contextLimit = null;
+                Integer outputLimit = null;
+                Object limit = m.get("limit");
+                if (limit instanceof Map) {
+                    Object ctx = ((Map<?, ?>) limit).get("context");
+                    Object outp = ((Map<?, ?>) limit).get("output");
+                    if (ctx instanceof Number) contextLimit = ((Number) ctx).intValue();
+                    if (outp instanceof Number) outputLimit = ((Number) outp).intValue();
+                }
+                out.add(new CatalogEntry((String) pv, (String) mv, name, score, contextLimit, outputLimit));
+            }
+            return out;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     // -- chain normalization --------------------------------------------------
 
     /**
@@ -240,8 +286,10 @@ public final class ModelMap {
      */
     public static Map<String, List<Assignment>> resolveModelMap(Store store, JsonCodec json, RoutingProfile p) {
         Map<String, Object> stored = readModelMap(store, json, p);
+        List<CatalogEntry> supplied = catalogFromStoreKey(store, json);
+        List<CatalogEntry> source = supplied != null ? supplied : catalogEntries(store, json, cachedProviderIds(store, json));
         List<CatalogEntry> catalog = new ArrayList<>();
-        for (CatalogEntry e : catalogEntries(store, json, cachedProviderIds(store, json))) {
+        for (CatalogEntry e : source) {
             if (!e.model.endsWith("-auto")) catalog.add(e);
         }
 

@@ -151,6 +151,47 @@ class ModelMapTest {
         assertTrue(opus.get(0).derived);
     }
 
+    // -- resolveModelMap: supplied "catalog" store key --------------------------
+
+    @Test
+    void resolveModelMap_suppliedCatalogKey_resolvesAProviderAbsentFromModelsJson() {
+        InMemoryStore store = new InMemoryStore();
+        TestJsonCodec json = new TestJsonCodec();
+        RoutingProfile p = testProfile();
+        // "newprov" has no models.json entry at all: without the supplied catalog key it would be
+        // completely invisible to resolveModelMap (cachedProviderIds only reads models.json).
+        store.put(p.configFile, "{\"modelMap\":{\"opus\":{\"provider\":\"newprov\",\"model\":\"newprov-model-1\"}}}");
+        store.put("catalog", "[{\"provider\":\"newprov\",\"model\":\"newprov-model-1\",\"name\":\"New Provider Model\"}]");
+
+        Map<String, List<Assignment>> map = ModelMap.resolveModelMap(store, json, p);
+
+        List<Assignment> opus = map.get("opus");
+        assertNotNull(opus);
+        assertEquals(1, opus.size());
+        assertEquals("newprov", opus.get(0).provider);
+        assertEquals("newprov-model-1", opus.get(0).model);
+        assertEquals("New Provider Model", opus.get(0).name);
+        assertFalse(opus.get(0).derived);
+    }
+
+    @Test
+    void resolveModelMap_noCatalogKey_fallsBackToModelsJsonCachedProviderIds() {
+        // No "catalog" key at all (the JVM backend's real usage): behavior must be identical to
+        // before the catalog key existed, proving ai-java is unaffected.
+        InMemoryStore store = new InMemoryStore();
+        TestJsonCodec json = new TestJsonCodec();
+        RoutingProfile p = testProfile();
+        store.put(p.configFile, "{\"modelMap\":{\"opus\":{\"provider\":\"antigravity\",\"model\":\"m-opus\"}}}");
+        store.put("models.json", "{\"antigravity\":{\"models\":{\"m-opus\":{\"name\":\"M Opus\"}},\"ranking\":[\"m-opus\"]}}");
+
+        Map<String, List<Assignment>> map = ModelMap.resolveModelMap(store, json, p);
+
+        assertEquals("antigravity", map.get("opus").get(0).provider);
+        assertEquals("m-opus", map.get("opus").get(0).model);
+        assertEquals("M Opus", map.get("opus").get(0).name);
+        assertFalse(map.get("opus").get(0).derived);
+    }
+
     // -- modelEnvPairs ---------------------------------------------------------
 
     @Test
