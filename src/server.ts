@@ -231,7 +231,7 @@ export function createProxyServer(opts: ProxyOptions): ProxyServer {
       }
       lastResp = resp;
       if (isRateLimited(resp)) {
-        const ms = rateLimitResetMs(resp);
+        const ms = await rateLimitResetMs(resp);
         if (ms > resetMs) resetMs = ms;
         log("rate-limited on " + assigned.provider + "/" + assigned.model + ", trying next fallback");
         continue;

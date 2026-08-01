@@ -1,3 +1,4 @@
+import { loadCoreProxy } from "./index.js";
 import type { RoutingProfile } from "./types.js";
 
 export function isRateLimited(resp: Response): boolean {
@@ -5,13 +6,18 @@ export function isRateLimited(resp: Response): boolean {
 }
 
 // Earliest epoch-ms the response says it'll be usable again (x-hub-retry-after-ms, else retry-after
-// seconds). `now` defaults to Date.now() but is injectable for tests.
-export function rateLimitResetMs(resp: Response, now: number = Date.now()): number {
-  const xr = parseInt(resp.headers.get("x-hub-retry-after-ms") || "", 10);
-  if (!Number.isNaN(xr) && xr > 0) return now + xr;
-  const ra = parseInt(resp.headers.get("retry-after") || "", 10);
-  if (!Number.isNaN(ra) && ra > 0) return now + ra * 1000;
-  return 0;
+// seconds). `now` defaults to Date.now() but is injectable for tests. Header extraction stays here;
+// the arithmetic is CoreProxyJs.rateLimitResetMsJson (single source, mirrors RateLimit.java).
+export async function rateLimitResetMs(resp: Response, now: number = Date.now()): Promise<number> {
+  const args = {
+    headers: {
+      "x-hub-retry-after-ms": resp.headers.get("x-hub-retry-after-ms") || "",
+      "retry-after": resp.headers.get("retry-after") || "",
+    },
+    now,
+  };
+  const core = await loadCoreProxy();
+  return JSON.parse(core.rateLimitResetMsJson(JSON.stringify(args))) as number;
 }
 
 // Final response when every model in a chain is rate-limited. Delegates the native-shaped 429

@@ -22,11 +22,31 @@ it("isRateLimited: 429 or x-hub-rate-limited header", () => {
   expect(isRateLimited(new Response("", { status: 200 }))).toBe(false);
 });
 
-it("rateLimitResetMs: prefers x-hub-retry-after-ms, else retry-after seconds", () => {
+it("rateLimitResetMs: prefers x-hub-retry-after-ms, else retry-after seconds", async () => {
   const now = 1_000_000;
-  expect(rateLimitResetMs(new Response("", { headers: { "x-hub-retry-after-ms": "5000" } }), now)).toBe(now + 5000);
-  expect(rateLimitResetMs(new Response("", { headers: { "retry-after": "2" } }), now)).toBe(now + 2000);
-  expect(rateLimitResetMs(new Response("", {}), now)).toBe(0);
+  expect(await rateLimitResetMs(new Response("", { headers: { "x-hub-retry-after-ms": "5000" } }), now)).toBe(
+    now + 5000
+  );
+  expect(await rateLimitResetMs(new Response("", { headers: { "retry-after": "2" } }), now)).toBe(now + 2000);
+  expect(await rateLimitResetMs(new Response("", {}), now)).toBe(0);
+});
+
+// Frozen parity matrix: locks the TS behavior before/after delegating the arithmetic to
+// CoreProxyJs.rateLimitResetMsJson. NOW is fixed so every case is deterministic.
+const NOW = 1_000_000;
+const rateLimitResetMsCases: Array<[Record<string, string>, number]> = [
+  [{ "x-hub-retry-after-ms": "5000" }, NOW + 5000],
+  [{ "retry-after": "5" }, NOW + 5000],
+  [{ "retry-after": "0" }, 0],
+  [{}, 0],
+  [{ "x-hub-retry-after-ms": "5000", "retry-after": "9" }, NOW + 5000],
+  [{ "x-hub-retry-after-ms": "abc" }, 0],
+  [{ "x-hub-retry-after-ms": "5000abc" }, NOW + 5000],
+  [{ "retry-after": "-5" }, 0],
+];
+it.each(rateLimitResetMsCases)("rateLimitResetMs parity %o -> %i", async (headers, expected) => {
+  const resp = new Response(null, { headers });
+  expect(await rateLimitResetMs(resp, NOW)).toBe(expected);
 });
 
 it("rateLimitFinal: builds via profile.nativeRateLimit", async () => {
