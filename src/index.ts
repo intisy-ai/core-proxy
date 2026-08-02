@@ -27,3 +27,6 @@ export { claudeTiers, readModelMap, catalogEntries, normalizeChain, resolveModel
 export { makeDynamicResolver } from "./handler-resolver.js";
 
 export { createProxyServer } from "./server.js";
+
+export { serveIr } from "./serve-ir.js";
+export type { ServeIrOptions } from "./serve-ir.js";
