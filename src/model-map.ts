@@ -44,9 +44,10 @@ function modelCache(configDir: string): ModelCacheMap {
 }
 
 // Tiers are detected from the tier-source provider's catalog (family token of each model id, via
-// profile.tierRegex, e.g. claude-fable-5 -> "fable"), so new families appear as mapping slots
-// automatically. profile.tierOrder keeps known families in a familiar order; profile.tierFallback
-// covers pre-login (no catalog yet). Delegates to CoreProxyJs.resolveTiersJson (ModelMap.resolveTiers).
+// profile.tierRegex, e.g. a model id containing "fable" maps to family "fable"), so new families
+// appear as mapping slots automatically. profile.tierOrder keeps known families in a familiar
+// order; profile.tierFallback covers pre-login (no catalog yet). Delegates to
+// CoreProxyJs.resolveTiersJson (ModelMap.resolveTiers).
 export function claudeTiers(configDir: string, profile: RoutingProfile): string[] {
   const storeJson = JSON.stringify({ "models.json": JSON.stringify(modelCache(configDir)) });
   const profileJson = JSON.stringify(profileToJson(profile));
@@ -118,10 +119,10 @@ export function normalizeChain(raw: unknown): Chain {
 
 // Effective tier -> ordered chain of {provider, model, name, derived}. Each stored entry is kept
 // while its model still exists in the catalog; a fully stale tier heals only within the provider the
-// user chose, never silently to a different provider (an Opus->antigravity mapping must not become
-// the tier-source provider and then gate on its accounts). When the chosen provider has no catalog
-// at all, the stored entry passes through untouched (the catalog may simply not be fetched yet; if
-// the model is really gone the provider reports its own clear error). Only a tier with no stored
+// user chose, never silently to a different provider (a mapping to one provider's model must not
+// become a mapping to a different provider and then gate on its accounts). When the chosen provider
+// has no catalog at all, the stored entry passes through untouched (the catalog may simply not be
+// fetched yet; if the model is really gone the provider reports its own clear error). Only a tier with no stored
 // choice derives from the whole catalog. "-auto" ids skipped. Delegates to
 // CoreProxyJs.resolveModelMapJson (ModelMap.resolveModelMap), seeded with the stored mapping file and
 // the full catalogEntries() output (declared authProviders plus their cached or static models), so

@@ -17,10 +17,9 @@ function errorResponse(status: number, message: string): Response {
   });
 }
 
-// Claude Code validates its custom ANTHROPIC_DEFAULT_*_MODEL / ANTHROPIC_MODEL ids against
-// /v1/models. Provider-mapped ids don't exist at Anthropic, so forwarding upstream 404s would show
-// the /model picker stuck loading. Serve the loader's own catalog instead, where every mapped id
-// resolves.
+// The client validates its configured model ids against /v1/models. Provider-mapped ids do not
+// exist upstream, so forwarding upstream 404s would leave the model picker stuck loading; serve
+// the loader's own catalog instead, where every mapped id resolves.
 function modelInfo(entry: CatalogEntry, profile: RoutingProfile): Record<string, unknown> {
   return {
     type: "model",
@@ -58,7 +57,7 @@ function modelsResponse(url: URL, configDir: string, profile: RoutingProfile): R
 }
 
 // Classify a requested model into a mapping slot by tier keyword. Slots come from the resolved map
-// (detected Claude families incl. new ones), nothing hardcoded here.
+// (detected model families incl. new ones), nothing hardcoded here.
 function slotForModel(model: string, map: Record<string, Chain>): string {
   const m = (model || "").toLowerCase();
   for (const slot of Object.keys(map)) {

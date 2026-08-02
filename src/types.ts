@@ -127,9 +127,9 @@ export type RoutingProfile = {
   // notification is suppressed. When absent, unknown models always notify.
   nativeModelPattern?: RegExp;
   /**
-   * The app<->IR translator for this profile (e.g. core-ir's anthropic translator for Claude Code
-   * and OpenCode, which both speak the Anthropic wire format). Undefined means the profile has no
-   * IR front-door: the server then uses only the handle() path.
+   * The app<->IR translator for this profile (e.g. one of core-ir's per-vendor translators, shared
+   * by every app that speaks the same wire format). Undefined means the profile has no IR
+   * front-door: the server then uses only the handle() path.
    */
   translator?: VendorTranslator;
 };
