@@ -7,8 +7,8 @@ import { Readable } from "node:stream";
 import { initCoreProxy } from "./core-proxy-loader.js";
 import { resolveModelMap, catalogEntries } from "./model-map.js";
 import { isRateLimited, rateLimitResetMs, rateLimitFinal } from "./rate-limit.js";
-import { isHandleIrError } from "./types.js";
-import type { Assignment, CatalogEntry, Chain, IrEventStream, IrRequest, IrResponse, ProxyOptions, ProxyServer, RoutingProfile } from "./types.js";
+import { decodeIr, encodeIrResult, handleIrErrorToResponse } from "./ir-codec.js";
+import type { Assignment, CatalogEntry, Chain, ProxyOptions, ProxyServer, RoutingProfile } from "./types.js";
 
 function errorResponse(status: number, message: string): Response {
   return new Response(JSON.stringify({ type: "error", error: { type: "loader_proxy_error", message } }), {
@@ -121,36 +121,6 @@ export function createProxyServer(opts: ProxyOptions): ProxyServer {
     return (map[slot] && map[slot].length) ? map[slot] : (map.default || []);
   }
 
-  // Decodes the inbound app-wire body into the canonical IR via this profile's translator, when one
-  // is configured. Returns null (never throws) when there is no translator, no body, or the decode
-  // fails: any of those means use the handle() path, not fail the request.
-  async function decodeIr(request: Request): Promise<IrRequest | null> {
-    if (!opts.profile.translator) return null;
-    try {
-      const bodyText = await request.clone().text();
-      if (!bodyText) return null;
-      return await opts.profile.translator.decodeRequest(bodyText);
-    } catch (e) {
-      log("IR decode failed, falling back to wire routing: " + ((e as Error)?.message));
-      return null;
-    }
-  }
-
-  // Encodes an IR-native handler's result back to the app's wire format via this profile's
-  // translator: a non-streaming IrResponse becomes one JSON body; an IrEventStream (canonical IR
-  // events produced directly by the provider, never buffered) is piped through the translator's
-  // stateful encoder to the vendor's SSE text, then to bytes.
-  async function encodeIrResult(irResult: IrResponse | IrEventStream): Promise<Response> {
-    const translator = opts.profile.translator!;
-    if (irResult instanceof ReadableStream) {
-      const encodeStream = await translator.encodeStream();
-      const byteStream = irResult.pipeThrough(encodeStream).pipeThrough(new TextEncoderStream());
-      return new Response(byteStream, { status: 200, headers: { "content-type": "text/event-stream" } });
-    }
-    const wire = await translator.encodeResponse(irResult);
-    return new Response(wire, { status: 200, headers: { "content-type": "application/json" } });
-  }
-
   async function route(request: Request): Promise<Response> {
     await initCoreProxy();
     const url = new URL(request.url);
@@ -159,7 +129,7 @@ export function createProxyServer(opts: ProxyOptions): ProxyServer {
 
     // Decode the inbound app-wire body into the canonical IR exactly once, when this profile has a
     // translator. A profile that never sets one stays on the wire handle() path below.
-    const ir = await decodeIr(request);
+    const ir = await decodeIr(opts.profile, request, log);
 
     const chain = ir ? await resolveAssignmentForModel(ir.model || "") : await resolveAssignment(request);
     if (!chain.length) {
@@ -197,19 +167,12 @@ export function createProxyServer(opts: ProxyOptions): ProxyServer {
       if (ir && typeof handler.handleIr === "function") {
         try {
           const irResult = await handler.handleIr(ir, ctx);
-          resp = await encodeIrResult(irResult);
+          resp = await encodeIrResult(opts.profile, irResult);
         } catch (e) {
-          if (isHandleIrError(e)) {
-            // A typed transport error carries the provider's real HTTP status/headers/body:
-            // reconstruct it as a Response so it flows through the same isRateLimited/
-            // rateLimitResetMs/fallback logic below (e.g. 429 fallback, verbatim 400).
-            const headers = new Headers(e.headers);
-            if (e.retryAfterMs != null && !headers.has("x-hub-retry-after-ms")) {
-              headers.set("x-hub-retry-after-ms", String(e.retryAfterMs));
-            }
-            resp = new Response(e.body, { status: e.status, headers });
+          const reconstructed = handleIrErrorToResponse(e);
+          if (reconstructed) {
+            resp = reconstructed;
           } else {
-            // Unexpected throw: a genuine bug, not a modeled transport outcome.
             log("handleIr error for " + assigned.provider + ": " + ((e as Error)?.message));
             lastResp = errorResponse(502, "Provider handler failed: " + ((e as Error)?.message));
             continue;
