@@ -141,6 +141,7 @@ export type ProxyOptions = {
   port?: number;
   log?: (m: string) => void;
   notify?: (m: string, level?: string) => void;
+  emitActivity?: (spec: { topic: string; action: string; actor?: string; impact?: string; subject?: any; details?: any }) => void;
 };
 
 export type ProxyServer = {

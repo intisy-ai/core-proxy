@@ -30,6 +30,19 @@ it("falls back past a rate-limited provider to the next", async () => {
   expect(r.status).toBe(200);
   expect(await r.text()).toBe("served m-ok");
 });
+it("emits rate_limit_fallback activity when a lane falls back", async () => {
+  const acts: any[] = [];
+  const handlers: any = {
+    rl: { handle: async () => new Response("", { status: 200, headers: { "x-hub-rate-limited": "1", "x-hub-retry-after-ms": "1000" } }) },
+    ok: { handle: async (_r: Request, ctx: any) => new Response("served " + ctx.model, { status: 200 }) },
+  };
+  await srv.close();
+  srv = createProxyServer({ configDir: dir, profile, port: 0, resolveHandler: async (n) => handlers[n] ?? null, emitActivity: (s) => acts.push(s) });
+  port = await srv.listen();
+  const r = await fetch(`http://127.0.0.1:${port}/v1/messages`, { method: "POST", body: "{}" });
+  expect(r.status).toBe(200);
+  expect(acts.some((a) => a.action === "rate_limit_fallback" && a.impact === "warning")).toBe(true);
+});
 it("synthesizes a native 429 when all providers are rate-limited", async () => {
   writeFileSync(join(dir, "config", "claude-code-loader.json"), JSON.stringify({ modelMap: { opus: [{ provider: "rl", model: "m-rl" }] } }));
   const r = await fetch(`http://127.0.0.1:${port}/v1/messages`, { method: "POST", body: "{}" });
