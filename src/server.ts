@@ -85,6 +85,12 @@ export function createProxyServer(opts: ProxyOptions): ProxyServer {
     try { opts.notify?.(message, level); } catch {}
   };
 
+  // Best-effort Activity emit alongside notify, for hosts that inject an Activity emitter instead
+  // of (or in addition to) a plain notification string. Never breaks the request path.
+  const emitActivity = (spec: { topic: string; action: string; actor?: string; impact?: string; subject?: any; details?: any }) => {
+    try { opts.emitActivity?.(spec); } catch {}
+  };
+
   // The ordered chain [{provider, model}, ...] assigned to the request's tier (primary +
   // fallbacks). Stale/unset tiers auto-derive to the current catalog, so routing tracks a model
   // refresh even if never re-assigned.
@@ -115,6 +121,7 @@ export function createProxyServer(opts: ProxyOptions): ProxyServer {
       if (entry) return [{ provider: entry.provider, model: entry.model, name: entry.name, derived: false }];
       if (!opts.profile.nativeModelPattern?.test(requested)) {
         notify("Requested model '" + requested + "' is not in any provider catalog, serving the Default tier instead.");
+        emitActivity({ topic: "proxy.status", action: "model_switched", impact: "notice", subject: { kind: "model", id: requested }, details: { servedTier: "Default" } });
       }
     }
     return (map[slot] && map[slot].length) ? map[slot] : (map.default || []);
@@ -138,11 +145,10 @@ export function createProxyServer(opts: ProxyOptions): ProxyServer {
     // The user must see substitutions: a healed primary means the stored mapping no longer matched
     // the catalog and routing re-derived it.
     if (chain[0] && chain[0].derived) {
-      notify(
-        "Model mapping healed: serving " + chain[0].provider + " · " + (chain[0].name || chain[0].model) +
-          " (the stored model for this tier is no longer in the catalog).",
-        "info"
-      );
+      const healedMessage = "Model mapping healed: serving " + chain[0].provider + " · " + (chain[0].name || chain[0].model) +
+        " (the stored model for this tier is no longer in the catalog).";
+      notify(healedMessage, "info");
+      emitActivity({ topic: "proxy.status", action: "route_healed", impact: "notice", details: { message: healedMessage } });
     }
 
     // Try the tier's models in order; advance to the next only when one is rate-limited, so a chain
@@ -203,6 +209,13 @@ export function createProxyServer(opts: ProxyOptions): ProxyServer {
       // Never switch the user silently: announce when a fallback (not the primary) served.
       if (i > 0) {
         notify((chain[0].name || chain[0].model) + " rate-limited → served by " + (assigned.name || assigned.model));
+        emitActivity({
+          topic: "account.rate_limited",
+          action: "rate_limit_fallback",
+          impact: "warning",
+          subject: { kind: "model", id: chain[0].name || chain[0].model },
+          details: { servedBy: assigned.name || assigned.model },
+        });
       }
       return resp; // success or a non-rate-limit error, surface it
     }
@@ -211,6 +224,7 @@ export function createProxyServer(opts: ProxyOptions): ProxyServer {
     // client renders its own rate-limit UI, consistent across providers.
     if ((lastResp && lastResp.status === 429) || resetMs > Date.now()) {
       notify("All mapped models for this tier are rate-limited, request rejected with the earliest reset time.");
+      emitActivity({ topic: "account.rate_limited", action: "rate_limited", impact: "warning", details: { resetMs } });
       return await rateLimitFinal(lastResp, resetMs, opts.profile);
     }
     return lastResp || errorResponse(503, "No provider handler available for this tier.");
