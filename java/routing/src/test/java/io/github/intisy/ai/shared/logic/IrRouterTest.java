@@ -5,7 +5,6 @@ import io.github.intisy.ai.ir.IrRequest;
 import io.github.intisy.ai.ir.IrResponse;
 import io.github.intisy.ai.ir.TextBlock;
 import io.github.intisy.ai.ir.spi.Translator;
-import io.github.intisy.ai.ir.translators.anthropic.AnthropicTranslator;
 import io.github.intisy.ai.shared.routing.HandleIrException;
 import io.github.intisy.ai.shared.routing.HandlerCtx;
 import io.github.intisy.ai.shared.routing.HandlerResolver;
@@ -30,11 +29,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Proves the Router's IR front door end to end (an inbound Anthropic-wire request is decoded to the
- * canonical IR via {@link RoutingProfile#translator}, routed on {@code IrRequest.model}, handed to a
- * {@link Provider#handleIr}, and the returned {@link IrResponse} is encoded back to Anthropic wire),
+ * Proves the Router's IR front door end to end (an inbound wire request is decoded to the canonical
+ * IR via {@link RoutingProfile#translator}, routed on {@code IrRequest.model}, handed to a
+ * {@link Provider#handleIr}, and the returned {@link IrResponse} is encoded back to the wire),
  * alongside the fallback that keeps a handle()-only provider working even when the profile carries a
- * translator.
+ * translator. The translator is {@link TestTranslator}: routing is vendor-neutral, so which vendor
+ * speaks the wire is irrelevant here and each real one is tested in its own repo.
  */
 class IrRouterTest {
 
@@ -178,15 +178,15 @@ class IrRouterTest {
         }
     }
 
-    private static Translator anthropicTranslator() {
-        return new AnthropicTranslator(new IrJsonCodecAdapter(new TestJsonCodec()));
+    private static Translator testTranslator() {
+        return new TestTranslator(new TestJsonCodec());
     }
 
     @Test
     void irCapableProvider_decodesRoutesHandlesAndEncodesThroughIr() {
         InMemoryStore store = new InMemoryStore();
         store.put(CONFIG_FILE, "{\"modelMap\":{\"opus\":[{\"provider\":\"ok\",\"model\":\"m-ok\"}]}}");
-        RoutingProfile profile = testProfile(anthropicTranslator());
+        RoutingProfile profile = testProfile(testTranslator());
         HandlerResolver resolver = HandlerResolvers.fromProviders(
                 Collections.singletonList((Provider) new EchoIrProvider("ok")));
         RouterOptions opts = baseOptions(store, profile, resolver, List.of("ok"));
@@ -196,9 +196,9 @@ class IrRouterTest {
         HttpResponse resp = Router.route(post("/v1/messages", wireRequest), opts);
 
         assertEquals(200, resp.status);
-        // The Router encoded the provider's IrResponse back to Anthropic wire via the profile's
+        // The Router encoded the provider's IrResponse back to the wire via the profile's
         // translator; decode it again to assert on the neutral shape, not a raw string match.
-        IrResponse decoded = anthropicTranslator().decodeResponse(resp.body);
+        IrResponse decoded = testTranslator().decodeResponse(resp.body);
         assertEquals("m-ok", decoded.model, "ctx.model (the assigned model) must reach the provider, matching the handle() contract");
         assertEquals("end_turn", decoded.stopReason);
         assertTrue(decoded.content.get(0) instanceof TextBlock);
@@ -209,7 +209,7 @@ class IrRouterTest {
     void legacyOnlyProvider_stillServesViaHandleFallback_evenWhenProfileHasTranslator() {
         InMemoryStore store = new InMemoryStore();
         store.put(CONFIG_FILE, "{\"modelMap\":{\"opus\":[{\"provider\":\"legacy\",\"model\":\"m-legacy\"}]}}");
-        RoutingProfile profile = testProfile(anthropicTranslator());
+        RoutingProfile profile = testProfile(testTranslator());
         HandlerResolver resolver = HandlerResolvers.fromProviders(
                 Collections.singletonList((Provider) new LegacyOnlyProvider()));
         RouterOptions opts = baseOptions(store, profile, resolver, List.of("legacy"));
@@ -233,7 +233,7 @@ class IrRouterTest {
         store.put(CONFIG_FILE, "{\"modelMap\":{\"opus\":["
                 + "{\"provider\":\"primary\",\"model\":\"m-primary\"},"
                 + "{\"provider\":\"fallback\",\"model\":\"m-fallback\"}]}}");
-        RoutingProfile profile = testProfile(anthropicTranslator());
+        RoutingProfile profile = testProfile(testTranslator());
         ThrowingIrProvider primary = new ThrowingIrProvider("primary",
                 new HandleIrException(429, new HashMap<>(), "{\"type\":\"error\"}", 5000L));
         ThrowingIrProvider fallback = new ThrowingIrProvider("fallback",
@@ -259,7 +259,7 @@ class IrRouterTest {
         store.put(CONFIG_FILE, "{\"modelMap\":{\"opus\":["
                 + "{\"provider\":\"primary\",\"model\":\"m-primary\"},"
                 + "{\"provider\":\"fallback\",\"model\":\"m-fallback\"}]}}");
-        RoutingProfile profile = testProfile(anthropicTranslator());
+        RoutingProfile profile = testProfile(testTranslator());
         ThrowingIrProvider primary = new ThrowingIrProvider("primary",
                 new HandleIrException(400, new HashMap<>(), "{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\"}}"));
         ThrowingIrProvider fallback = new ThrowingIrProvider("fallback",
@@ -281,7 +281,7 @@ class IrRouterTest {
     void handleIrThrowsPlainException_stillCollapsesToFlat502_unchanged() {
         InMemoryStore store = new InMemoryStore();
         store.put(CONFIG_FILE, "{\"modelMap\":{\"opus\":[{\"provider\":\"ok\",\"model\":\"m-ok\"}]}}");
-        RoutingProfile profile = testProfile(anthropicTranslator());
+        RoutingProfile profile = testProfile(testTranslator());
         ThrowingIrProvider ok = new ThrowingIrProvider("ok", new RuntimeException("boom"));
         HandlerResolver resolver = HandlerResolvers.fromProviders(Collections.singletonList((Provider) ok));
         RouterOptions opts = baseOptions(store, profile, resolver, List.of("ok"));
