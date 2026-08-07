@@ -1,21 +1,41 @@
 {
   "name": "core-proxy",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Generic routing and rate-limit proxy engine for the intisy-ai AI-proxy ecosystem.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "license": "MIT",
   "author": "intisy",
-  "repository": { "type": "git", "url": "git+https://github.com/intisy-ai/core-proxy.git" },
-  "keywords": ["proxy", "routing", "anthropic", "ai", "intisy", "core-proxy"],
-  "files": ["dist/", "README.md", "LICENSE"],
-  "engines": { "node": ">=20.0.0" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/intisy-ai/core-proxy.git"
+  },
+  "keywords": [
+    "proxy",
+    "routing",
+    "anthropic",
+    "ai",
+    "intisy",
+    "core-proxy"
+  ],
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "build": "npm --prefix core-ir install && npm --prefix core-ir run build && npm run build:teavm && tsc && node copy-generated.mjs",
     "build:teavm": "node teavm-build.mjs --java-dir java --module :teavm --out src/generated/core-proxy.teavm.js",
     "test": "vitest run",
     "prepublishOnly": "npm run build"
   },
-  "devDependencies": { "typescript": "^5.6.0", "vitest": "^2.1.0", "@types/node": "^22.0.0" }
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "@types/node": "^22.0.0"
+  }
 }
