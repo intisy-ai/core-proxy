@@ -1,11 +1,11 @@
 import { expect, it } from "vitest";
 import { serveIr } from "./serve-ir.js";
-import { translators } from "../core-ir/dist/index.js";
+import { makeFakeTranslator } from "./__tests__/fake-translator.js";
 import type { IrRequest, IrResponse, IrStreamEvent } from "../core-ir/dist/index.js";
 
-const profile = { translator: translators.anthropic } as any;
+const profile = { translator: makeFakeTranslator() } as any;
 const ctx = { configDir: "/tmp", log: () => {}, model: "m-ok", provider: "p" } as any;
-const wire = JSON.stringify({ model: "claude-x", max_tokens: 16, messages: [{ role: "user", content: "hi there" }] });
+const wire = JSON.stringify({ model: "claude-x", max_tokens: 16, messages: [{ role: "user", content: [{ kind: "text", text: "hi there" }] }] });
 const req = () => new Request("http://x/v1/messages", { method: "POST", body: wire });
 
 it("decodes wire -> IR, calls handleIr, encodes the IrResponse back to wire", async () => {
@@ -18,11 +18,11 @@ it("decodes wire -> IR, calls handleIr, encodes the IrResponse back to wire", as
   const res = await serveIr(req(), { profile, handleIr, ctx });
   expect(res.status).toBe(200);
   expect(seen!.model).toBe("claude-x");
-  const decoded = await translators.anthropic.decodeResponse(await res.text());
+  const decoded = await profile.translator.decodeResponse(await res.text());
   expect(decoded.content[0]).toMatchObject({ kind: "text", text: "via IR: hi there" });
 });
 
-it("encodes an IR event stream to Anthropic SSE", async () => {
+it("encodes an IR event stream to wire text through the translator's encodeStream", async () => {
   const handleIr = async (): Promise<ReadableStream<IrStreamEvent>> => new ReadableStream({
     start(c) {
       for (const e of [
@@ -38,10 +38,10 @@ it("encodes an IR event stream to Anthropic SSE", async () => {
   });
   const res = await serveIr(req(), { profile, handleIr, ctx });
   expect(res.headers.get("content-type")).toBe("text/event-stream");
-  const sse = await res.text();
-  expect(sse).toContain("event: message_start");
-  expect(sse).toContain("hello");
-  expect(sse).toContain("event: message_stop");
+  const body = await res.text();
+  expect(body).toContain('"event":"message_start"');
+  expect(body).toContain("hello");
+  expect(body).toContain('"event":"message_stop"');
 });
 
 it("reconstructs a thrown typed HandleIrError verbatim", async () => {

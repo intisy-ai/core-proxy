@@ -1,9 +1,9 @@
 import { expect, it } from "vitest";
 import { decodeIr, encodeIrResult, handleIrErrorToResponse } from "./ir-codec.js";
-import { translators } from "../core-ir/dist/index.js";
+import { makeFakeTranslator } from "./__tests__/fake-translator.js";
 import type { IrResponse } from "../core-ir/dist/index.js";
 
-const profile = { translator: translators.anthropic } as any;
+const profile = { translator: makeFakeTranslator() } as any;
 const wire = JSON.stringify({ model: "claude-x", max_tokens: 16, messages: [{ role: "user", content: "hi" }] });
 
 it("decodeIr returns an IrRequest for a decodable body and null when the profile has no translator", async () => {
@@ -18,7 +18,7 @@ it("decodeIr returns null (never throws) on an undecodable body", async () => {
   expect(ir).toBeNull();
 });
 
-it("encodeIrResult encodes an IrResponse to a JSON Anthropic wire body", async () => {
+it("encodeIrResult encodes an IrResponse through the profile's translator as a JSON wire body", async () => {
   const irResponse: IrResponse = {
     id: "msg_1", model: "m-ok", content: [{ kind: "text", text: "hello" }],
     stopReason: "end_turn", usage: { inputTokens: 1, outputTokens: 1 },
@@ -26,7 +26,7 @@ it("encodeIrResult encodes an IrResponse to a JSON Anthropic wire body", async (
   const res = await encodeIrResult(profile, irResponse);
   expect(res.status).toBe(200);
   expect(res.headers.get("content-type")).toBe("application/json");
-  const decoded = await translators.anthropic.decodeResponse(await res.text());
+  const decoded = await profile.translator.decodeResponse(await res.text());
   expect(decoded.content[0]).toMatchObject({ kind: "text", text: "hello" });
 });
 
