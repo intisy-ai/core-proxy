@@ -9,6 +9,7 @@ import io.github.intisy.ai.shared.store.InMemoryStore;
 import io.github.intisy.ai.shared.store.TestJsonCodec;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -81,7 +82,7 @@ class RouterTest {
         };
         opts.notify = (message, level) -> {
         };
-        opts.listProviders = () -> List.of("rl", "ok");
+        opts.listProviders = () -> Arrays.asList("rl", "ok");
         opts.configDir = "";
         return opts;
     }
@@ -155,7 +156,7 @@ class RouterTest {
             return resp;
         });
         opts.resolveHandler = HandlerResolvers.fromRegistry(registry);
-        opts.listProviders = () -> List.of("cap");
+        opts.listProviders = () -> Collections.singletonList("cap");
 
         Router.route(post("/v1/messages", "{}"), opts);
 

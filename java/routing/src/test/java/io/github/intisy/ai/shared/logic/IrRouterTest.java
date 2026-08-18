@@ -189,7 +189,7 @@ class IrRouterTest {
         RoutingProfile profile = testProfile(testTranslator());
         HandlerResolver resolver = HandlerResolvers.fromProviders(
                 Collections.singletonList((Provider) new EchoIrProvider("ok")));
-        RouterOptions opts = baseOptions(store, profile, resolver, List.of("ok"));
+        RouterOptions opts = baseOptions(store, profile, resolver, Collections.singletonList("ok"));
 
         String wireRequest = "{\"model\":\"claude-opus-4-1\",\"messages\":"
                 + "[{\"role\":\"user\",\"content\":\"hi there\"}],\"stream\":false}";
@@ -212,7 +212,7 @@ class IrRouterTest {
         RoutingProfile profile = testProfile(testTranslator());
         HandlerResolver resolver = HandlerResolvers.fromProviders(
                 Collections.singletonList((Provider) new LegacyOnlyProvider()));
-        RouterOptions opts = baseOptions(store, profile, resolver, List.of("legacy"));
+        RouterOptions opts = baseOptions(store, profile, resolver, Collections.singletonList("legacy"));
 
         String wireRequest = "{\"model\":\"claude-opus-4-1\",\"messages\":"
                 + "[{\"role\":\"user\",\"content\":\"hi there\"}],\"stream\":false}";
@@ -239,7 +239,7 @@ class IrRouterTest {
         ThrowingIrProvider fallback = new ThrowingIrProvider("fallback",
                 new HandleIrException(429, new HashMap<>(), "{\"type\":\"error\"}"));
         HandlerResolver resolver = HandlerResolvers.fromProviders(Arrays.<Provider>asList(primary, fallback));
-        RouterOptions opts = baseOptions(store, profile, resolver, List.of("primary", "fallback"));
+        RouterOptions opts = baseOptions(store, profile, resolver, Arrays.asList("primary", "fallback"));
 
         String wireRequest = "{\"model\":\"claude-opus-4-1\",\"messages\":"
                 + "[{\"role\":\"user\",\"content\":\"hi there\"}],\"stream\":false}";
@@ -265,7 +265,7 @@ class IrRouterTest {
         ThrowingIrProvider fallback = new ThrowingIrProvider("fallback",
                 new RuntimeException("fallback must never be attempted for a non-rate-limit error"));
         HandlerResolver resolver = HandlerResolvers.fromProviders(Arrays.<Provider>asList(primary, fallback));
-        RouterOptions opts = baseOptions(store, profile, resolver, List.of("primary", "fallback"));
+        RouterOptions opts = baseOptions(store, profile, resolver, Arrays.asList("primary", "fallback"));
 
         String wireRequest = "{\"model\":\"claude-opus-4-1\",\"messages\":"
                 + "[{\"role\":\"user\",\"content\":\"hi there\"}],\"stream\":false}";
@@ -284,7 +284,7 @@ class IrRouterTest {
         RoutingProfile profile = testProfile(testTranslator());
         ThrowingIrProvider ok = new ThrowingIrProvider("ok", new RuntimeException("boom"));
         HandlerResolver resolver = HandlerResolvers.fromProviders(Collections.singletonList((Provider) ok));
-        RouterOptions opts = baseOptions(store, profile, resolver, List.of("ok"));
+        RouterOptions opts = baseOptions(store, profile, resolver, Collections.singletonList("ok"));
 
         String wireRequest = "{\"model\":\"claude-opus-4-1\",\"messages\":"
                 + "[{\"role\":\"user\",\"content\":\"hi there\"}],\"stream\":false}";
@@ -320,7 +320,7 @@ class IrRouterTest {
             }
         };
         HandlerResolver resolver = HandlerResolvers.fromProviders(Collections.singletonList(provider));
-        RouterOptions opts = baseOptions(store, profile, resolver, List.of("ok"));
+        RouterOptions opts = baseOptions(store, profile, resolver, Collections.singletonList("ok"));
 
         String wireRequest = "{\"model\":\"claude-opus-4-1\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}";
         HttpResponse resp = Router.route(post("/v1/messages", wireRequest), opts);

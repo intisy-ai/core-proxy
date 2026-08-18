@@ -7,6 +7,9 @@ import io.github.intisy.ai.shared.store.InMemoryStore;
 import io.github.intisy.ai.shared.store.TestJsonCodec;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -28,8 +31,8 @@ class ModelMapTest {
         p.configFile = "model-map-test.json";
         p.routingKey = "providerRouting";
         p.tierSourceProvider = "antigravity";
-        p.tierOrder = List.of("opus", "sonnet", "haiku", "fable");
-        p.tierFallback = List.of("opus", "sonnet", "haiku", "fable");
+        p.tierOrder = Arrays.asList("opus", "sonnet", "haiku", "fable");
+        p.tierFallback = Arrays.asList("opus", "sonnet", "haiku", "fable");
         p.tierRegex = Pattern.compile("^claude-([a-z]+)-\\d");
         p.envPrefix = "ANTHROPIC";
         p.defaultContext = 200000;
@@ -41,7 +44,10 @@ class ModelMapTest {
 
     @Test
     void normalizeChain_legacyObject_becomesSingleElementList() {
-        List<Assignment> out = ModelMap.normalizeChain(Map.of("provider", "antigravity", "model", "m-opus"));
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry.put("provider", "antigravity");
+        entry.put("model", "m-opus");
+        List<Assignment> out = ModelMap.normalizeChain(entry);
         assertEquals(1, out.size());
         assertEquals("antigravity", out.get(0).provider);
         assertEquals("m-opus", out.get(0).model);
@@ -49,10 +55,12 @@ class ModelMapTest {
 
     @Test
     void normalizeChain_listWithInvalidEntry_filtersItOut() {
-        List<Assignment> out = ModelMap.normalizeChain(List.of(
-                Map.of("provider", "antigravity", "model", "m-opus"),
-                Map.of("provider", "antigravity") // missing model -> invalid
-        ));
+        Map<String, Object> valid = new LinkedHashMap<>();
+        valid.put("provider", "antigravity");
+        valid.put("model", "m-opus");
+        Map<String, Object> invalid = new LinkedHashMap<>();
+        invalid.put("provider", "antigravity"); // missing model -> invalid
+        List<Assignment> out = ModelMap.normalizeChain(Arrays.asList(valid, invalid));
         assertEquals(1, out.size());
         assertEquals("m-opus", out.get(0).model);
     }
@@ -94,7 +102,7 @@ class ModelMapTest {
         TestJsonCodec json = new TestJsonCodec();
         store.put("models.json", "{\"antigravity\":{\"models\":{\"m-opus\":{\"name\":\"M Opus\",\"limit\":{\"context\":200000,\"output\":8192}}},\"ranking\":[\"m-opus\"]}}");
 
-        List<CatalogEntry> entries = ModelMap.catalogEntries(store, json, List.of("antigravity"));
+        List<CatalogEntry> entries = ModelMap.catalogEntries(store, json, Collections.singletonList("antigravity"));
         assertEquals(1, entries.size());
         assertEquals("antigravity", entries.get(0).provider);
         assertEquals("m-opus", entries.get(0).model);
@@ -107,7 +115,7 @@ class ModelMapTest {
     void catalogEntries_providerWithNoCache_isSkipped() {
         InMemoryStore store = new InMemoryStore();
         TestJsonCodec json = new TestJsonCodec();
-        List<CatalogEntry> entries = ModelMap.catalogEntries(store, json, List.of("unknown-provider"));
+        List<CatalogEntry> entries = ModelMap.catalogEntries(store, json, Collections.singletonList("unknown-provider"));
         assertTrue(entries.isEmpty());
     }
 
