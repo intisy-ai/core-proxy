@@ -6,13 +6,16 @@ plugins {
 }
 
 dependencies {
-    // teavm transpiles :routing's pure logic (no gson/net/nio/etc), matching :routing's own
-    // zero-dependency policy (Router/ModelMap already avoid java.net/nio for exactly this reason).
-    // :routing only declares :ir compileOnly (see routing/build.gradle), so it is not on this
-    // module's classpath transitively; Router actually references IrRequest/IrResponse/Translator
-    // at runtime (the IR decode/handleIr path), so TeaVM needs :ir's classes reachable too.
+    // teavm transpiles the routing engine and, transitively through :routing's api dependency, the
+    // :spi contract types it routes against. Both avoid gson/net/nio for exactly this reason.
     implementation project(":routing")
+    // :routing declares :ir compileOnly, so it is not here transitively; Router references
+    // IrRequest/IrResponse/Translator at run time, so TeaVM needs :ir's classes reachable.
     implementation project(":ir")
+    // :js-base carries the TeaVM implementations of :spi's host-injected services (SimpleJsonCodec,
+    // JsHttpClientBridge, JsStoreBridge, InMemoryStore), which CoreProxyJs assembles. Embedding a
+    // copy is the point of a TeaVM bundle; sharing the SOURCE is what stops it being duplicated.
+    implementation project(":js-base")
     teavm teavm.libs.jsoApis
 }
 

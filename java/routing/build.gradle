@@ -1,13 +1,19 @@
-// SPIs + routing types + routing logic. Zero-dependency by design (no gson/java.net/java.nio/
-// reflection/threads) so this module transpiles cleanly under TeaVM (see ../teavm).
+// The routing engine: Router/ModelMap/RateLimit/HandlerResolvers/Notifier. Zero-dependency by design
+// (no gson/java.net/java.nio/reflection/threads) so this module transpiles cleanly under TeaVM.
 dependencies {
-    // core-ir's IR types + Translator SPI: RoutingProfile.translator and Provider.handleIr reference
-    // io.github.intisy.ai.ir.{IrRequest,IrResponse}/ir.spi.Translator. Same "keep the shipped jar
-    // thin" discipline the provider modules use for :routing itself (see
-    // claude-code-auth/java/claude-provider/build.gradle): core-proxy does not construct any
-    // Translator instance itself (that is the front-door caller's job), so compileOnly keeps :ir's
-    // classes out of routing's own built jar; testImplementation re-adds it so RouterTest can
-    // construct a real AnthropicTranslator to prove the IR front-door path end to end.
+    // :spi is the plugin-to-host contract the engine routes against, and it is an `api` dependency
+    // rather than `implementation` because Router's own signatures name its types: a consumer that
+    // compiles against :routing needs them on its compile classpath too.
+    api project(":spi")
+
+    // core-ir's IR types + Translator SPI: Router carries IR alongside the HttpRequest/HttpResponse
+    // path. compileOnly keeps :ir's classes out of this module's jar, because the engine constructs
+    // no Translator itself (that is the front-door caller's job); testImplementation re-adds it so
+    // RouterTest can build a real AnthropicTranslator and prove the IR path end to end.
     compileOnly project(":ir")
     testImplementation project(":ir")
+
+    // The engine's tests need the same doubles for :spi's Store and JsonCodec that :spi's own tests
+    // do, shared as test fixtures rather than duplicated here.
+    testImplementation testFixtures(project(":spi"))
 }

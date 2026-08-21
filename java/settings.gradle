@@ -4,18 +4,25 @@ plugins {
 
 rootProject.name = "core-proxy-java"
 
-// :routing  - SPIs + routing types + routing logic (Router/ModelMap/RateLimit/Provider),
+// :routing  - the routing ENGINE only (Router/ModelMap/RateLimit/HandlerResolvers/Notifier),
 //             transpilable Java 8, no gson/net/nio/reflect/threads.
-// :teavm    - TeaVM JS export surface over :routing (SimpleJsonCodec, JsHttpClientBridge,
-//             JsStoreBridge, CoreProxyJs) -> generateJavaScript emits an ES2015 module.
+// :teavm    - TeaVM JS export surface over :routing (CoreProxyJs) -> generateJavaScript emits an
+//             ES2015 module.
 include ":routing"
 include ":teavm"
 
+// :spi and :js-base - the plugin-to-host contract the engine routes against, and its TeaVM service
+// implementations, from the core-contracts submodule (../core-contracts from here). They live there
+// rather than here because a provider implements them and a provider carries no proxy; the engine is
+// one consumer of that contract among several.
+include ":spi"
+project(":spi").projectDir = file("../core-contracts/java/spi")
+include ":js-base"
+project(":js-base").projectDir = file("../core-contracts/java/js-base")
+
 // :ir - core-ir's canonical IR types + vendor translators (AnthropicTranslator/GeminiTranslator),
-// aliased in exactly like providers alias :routing/:teavm (see claude-code-auth's java/settings.gradle
-// for the identical recipe). core-ir is a direct submodule of core-proxy (../core-ir from here, i.e.
-// core-proxy/core-ir), pinned to a fixed commit (see .gitmodules). :routing's Provider/RoutingProfile
-// reference core-ir's Translator/IrRequest/IrResponse types so the front-door (Router) can carry IR
-// alongside the HttpRequest/HttpResponse path.
+// from THIS repo's own core-ir submodule, which is also what src/types.ts imports. :spi declares a
+// plain project(":ir") dependency, so it resolves against whatever the including build aliases here:
+// one :ir per build, and no drift between core-proxy's Java and TypeScript views of core-ir.
 include ":ir"
 project(":ir").projectDir = file("../core-ir/java/ir")
