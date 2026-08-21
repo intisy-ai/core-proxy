@@ -1,19 +1,8 @@
 import { decodeIr, encodeIrResult, handleIrErrorToResponse } from "./ir-codec.js";
+import type { FrontDoorCapability } from "../core-ir/dist/index.js";
 import type { IrEventStream, IrRequest, IrResponse, RoutingProfile } from "./types.js";
 
-/**
- * Owns one app's wire format, structurally identical to api's `FrontDoorCapability`.
- *
- * @remarks
- * Mirrored rather than imported: core-proxy carries only `core-ir` as a submodule and cannot resolve
- * `@intisy-ai/api` the way a plugin repo does through its nested `core/api`. TypeScript matches by
- * shape, so a value built here satisfies api's interface with no cast.
- */
-export interface FrontDoorCapability {
-  decode(request: Request): Promise<IrRequest | null>;
-  encode(result: IrResponse | IrEventStream): Promise<Response>;
-  encodeError(error: unknown): Response | null;
-}
+export type { FrontDoorCapability } from "../core-ir/dist/index.js";
 
 /**
  * The `front-door` capability for one routing profile.
