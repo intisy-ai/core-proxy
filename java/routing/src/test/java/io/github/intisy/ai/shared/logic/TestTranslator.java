@@ -8,7 +8,7 @@ import io.github.intisy.ai.ir.TextBlock;
 import io.github.intisy.ai.ir.spi.StreamDecoder;
 import io.github.intisy.ai.ir.spi.StreamEncoder;
 import io.github.intisy.ai.ir.spi.Translator;
-import io.github.intisy.ai.shared.spi.JsonCodec;
+import io.github.intisy.ai.api.seam.JsonCodec;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

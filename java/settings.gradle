@@ -11,18 +11,29 @@ rootProject.name = "core-proxy-java"
 include ":routing"
 include ":teavm"
 
-// :spi and :js-base - the plugin-to-host contract the engine routes against, and its TeaVM service
-// implementations, from the core-contracts submodule (../core-contracts from here). They live there
-// rather than here because a provider implements them and a provider carries no proxy; the engine is
-// one consumer of that contract among several.
-include ":spi"
-project(":spi").projectDir = file("../core-contracts/java/spi")
+// :seam and :js-base - api's implementations of the layer-1 seams the engine is handed
+// (SimpleJsonCodec, InMemoryStore) and their TeaVM bridges, reached through core-ir's own api
+// submodule so every module in this build resolves api at the same coordinates.
+include ":seam"
+project(":seam").projectDir = file("../core-ir/api/java/seam")
 include ":js-base"
-project(":js-base").projectDir = file("../core-contracts/java/js-base")
+project(":js-base").projectDir = file("../core-ir/api/java/js-base")
 
-// :ir - core-ir's canonical IR types + vendor translators (AnthropicTranslator/GeminiTranslator),
-// from THIS repo's own core-ir submodule, which is also what src/types.ts imports. :spi declares a
-// plain project(":ir") dependency, so it resolves against whatever the including build aliases here:
-// one :ir per build, and no drift between core-proxy's Java and TypeScript views of core-ir.
+// :annotations, :processor and :contract come from api, reached the same way, because :ir exports
+// api's seam types in HandlerCtx's public fields and :proxy-contracts emits its own TypeScript.
+include ":annotations"
+project(":annotations").projectDir = file("../core-ir/api/java/annotations")
+include ":processor"
+project(":processor").projectDir = file("../core-ir/api/java/processor")
+include ":contract"
+project(":contract").projectDir = file("../core-ir/api/java/contract")
+
+// :ir - core-ir's canonical IR types, the handler seam the engine routes over, and the vendor
+// translators, from THIS repo's own core-ir submodule, which is also what src/types.ts imports.
+// One :ir per build, and no drift between core-proxy's Java and TypeScript views of core-ir.
 include ":ir"
 project(":ir").projectDir = file("../core-ir/java/ir")
+
+// :proxy-contracts - the routing vocabulary a proxy plugin implements, and the front-door key this
+// repo mints. Apart from :routing so a plugin implementing it does not link the engine.
+include ":proxy-contracts"

@@ -2,6 +2,3 @@
 	path = core-ir
 	url = https://github.com/intisy-ai/core-ir.git
 	branch = main
-[submodule "core-contracts"]
-	path = core-contracts
-	url = https://github.com/intisy-ai/core-contracts.git

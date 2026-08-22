@@ -3,8 +3,8 @@ package io.github.intisy.ai.shared.logic;
 import io.github.intisy.ai.shared.routing.Assignment;
 import io.github.intisy.ai.shared.routing.CatalogEntry;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
-import io.github.intisy.ai.shared.spi.JsonCodec;
-import io.github.intisy.ai.shared.spi.Store;
+import io.github.intisy.ai.api.seam.JsonCodec;
+import io.github.intisy.ai.api.seam.Store;
 import io.github.intisy.ai.shared.store.ModelsCache;
 
 import java.util.ArrayList;

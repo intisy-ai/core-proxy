@@ -1,7 +1,7 @@
 package io.github.intisy.ai.shared.logic;
 
 import io.github.intisy.ai.shared.routing.RoutingProfile;
-import io.github.intisy.ai.shared.spi.http.HttpResponse;
+import io.github.intisy.ai.api.seam.HttpResponse;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;

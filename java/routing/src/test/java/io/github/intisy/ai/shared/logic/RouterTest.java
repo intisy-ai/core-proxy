@@ -3,10 +3,11 @@ package io.github.intisy.ai.shared.logic;
 import io.github.intisy.ai.shared.routing.HandlerResolver;
 import io.github.intisy.ai.shared.routing.ProxyHandler;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
-import io.github.intisy.ai.shared.spi.http.HttpRequest;
-import io.github.intisy.ai.shared.spi.http.HttpResponse;
-import io.github.intisy.ai.shared.store.InMemoryStore;
-import io.github.intisy.ai.shared.store.TestJsonCodec;
+import io.github.intisy.ai.api.seam.HttpRequest;
+import io.github.intisy.ai.api.seam.HttpResponse;
+import io.github.intisy.ai.seam.InMemoryStore;
+import io.github.intisy.ai.seam.NoopLogger;
+import io.github.intisy.ai.seam.SimpleJsonCodec;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -67,7 +68,7 @@ class RouterTest {
             resp.body = "served " + ctx.model;
             return resp;
         });
-        return HandlerResolvers.fromRegistry(registry);
+        return HandlerResolvers.fromWireHandlers(registry);
     }
 
     private static RouterOptions baseOptions(InMemoryStore store) {
@@ -75,10 +76,9 @@ class RouterTest {
         opts.profile = testProfile();
         opts.resolveHandler = fakeResolver();
         opts.store = store;
-        opts.json = new TestJsonCodec();
+        opts.json = new SimpleJsonCodec();
         opts.clock = () -> 1_000_000L;
-        opts.log = msg -> {
-        };
+        opts.log = NoopLogger.INSTANCE;
         opts.notify = (message, level) -> {
         };
         opts.listProviders = () -> Arrays.asList("rl", "ok");
@@ -144,7 +144,7 @@ class RouterTest {
         InMemoryStore store = new InMemoryStore();
         store.put(CONFIG_FILE, "{\"modelMap\":{\"opus\":[{\"provider\":\"cap\",\"model\":\"m-cap\"}]}}");
         RouterOptions opts = baseOptions(store);
-        final io.github.intisy.ai.shared.spi.Store[] seen = new io.github.intisy.ai.shared.spi.Store[1];
+        final io.github.intisy.ai.api.seam.Store[] seen = new io.github.intisy.ai.api.seam.Store[1];
         Map<String, ProxyHandler> registry = new HashMap<>();
         registry.put("cap", (req, ctx) -> {
             seen[0] = ctx.store;
@@ -154,7 +154,7 @@ class RouterTest {
             resp.body = "ok";
             return resp;
         });
-        opts.resolveHandler = HandlerResolvers.fromRegistry(registry);
+        opts.resolveHandler = HandlerResolvers.fromWireHandlers(registry);
         opts.listProviders = () -> Collections.singletonList("cap");
 
         Router.route(post("/v1/messages", "{}"), opts);

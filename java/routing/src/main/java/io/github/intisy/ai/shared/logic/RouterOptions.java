@@ -2,10 +2,10 @@ package io.github.intisy.ai.shared.logic;
 
 import io.github.intisy.ai.shared.routing.HandlerResolver;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
-import io.github.intisy.ai.shared.spi.Clock;
-import io.github.intisy.ai.shared.spi.JsonCodec;
-import io.github.intisy.ai.shared.spi.Logger;
-import io.github.intisy.ai.shared.spi.Store;
+import io.github.intisy.ai.api.seam.Clock;
+import io.github.intisy.ai.api.seam.JsonCodec;
+import io.github.intisy.ai.api.seam.Logger;
+import io.github.intisy.ai.api.seam.Store;
 
 import java.util.Collections;
 import java.util.List;

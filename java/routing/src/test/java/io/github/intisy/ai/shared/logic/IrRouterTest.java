@@ -5,15 +5,17 @@ import io.github.intisy.ai.ir.IrRequest;
 import io.github.intisy.ai.ir.IrResponse;
 import io.github.intisy.ai.ir.TextBlock;
 import io.github.intisy.ai.ir.spi.Translator;
-import io.github.intisy.ai.shared.routing.HandleIrException;
-import io.github.intisy.ai.shared.routing.HandlerCtx;
+import io.github.intisy.ai.ir.spi.HandleIrException;
+import io.github.intisy.ai.ir.spi.HandlerCtx;
 import io.github.intisy.ai.shared.routing.HandlerResolver;
-import io.github.intisy.ai.shared.routing.Provider;
+import io.github.intisy.ai.shared.routing.ProxyHandler;
+import io.github.intisy.ai.ir.spi.IrHandler;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
-import io.github.intisy.ai.shared.store.InMemoryStore;
-import io.github.intisy.ai.shared.store.TestJsonCodec;
-import io.github.intisy.ai.shared.spi.http.HttpRequest;
-import io.github.intisy.ai.shared.spi.http.HttpResponse;
+import io.github.intisy.ai.seam.InMemoryStore;
+import io.github.intisy.ai.seam.NoopLogger;
+import io.github.intisy.ai.seam.SimpleJsonCodec;
+import io.github.intisy.ai.api.seam.HttpRequest;
+import io.github.intisy.ai.api.seam.HttpResponse;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -30,9 +32,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Proves the Router's IR front door end to end (an inbound wire request is decoded to the canonical
- * IR via {@link RoutingProfile#translator}, routed on {@code IrRequest.model}, handed to a
- * {@link Provider#handleIr}, and the returned {@link IrResponse} is encoded back to the wire),
- * alongside the fallback that keeps a handle()-only provider working even when the profile carries a
+ * IR via {@link RoutingProfile#translator}, routed on {@code IrRequest.model}, handed to
+ * {@link IrHandler#handleIr}, and the returned {@link IrResponse} is encoded back to the wire),
+ * alongside the fallback that keeps a wire-only handler working even when the profile carries a
  * translator. The translator is {@link TestTranslator}: routing is vendor-neutral, so which vendor
  * speaks the wire is irrelevant here and each real one is tested in its own repo.
  */
@@ -67,10 +69,9 @@ class IrRouterTest {
         opts.profile = profile;
         opts.resolveHandler = resolver;
         opts.store = store;
-        opts.json = new TestJsonCodec();
+        opts.json = new SimpleJsonCodec();
         opts.clock = () -> 1_000_000L;
-        opts.log = msg -> {
-        };
+        opts.log = NoopLogger.INSTANCE;
         opts.notify = (message, level) -> {
         };
         opts.listProviders = () -> providers;
@@ -87,9 +88,9 @@ class IrRouterTest {
         return req;
     }
 
-    /** An IR-native echo provider: handleIr overridden, handle() overridden only to assert it is
-     *  never called on the IR path. */
-    private static final class EchoIrProvider implements Provider {
+    /** An IR-native echo provider that also serves the wire path, so the test can assert the wire
+     *  path is never taken when the IR one is available. */
+    private static final class EchoIrProvider implements IrHandler, ProxyHandler {
         private final String id;
 
         EchoIrProvider(String id) {
@@ -131,12 +132,17 @@ class IrRouterTest {
         }
     }
 
-    /** A Provider that only implements handle(); handleIr is left as Provider's default (throws
-     *  UnsupportedOperationException), proving the Router's fallback. */
-    private static final class LegacyOnlyProvider implements Provider {
+    /** A handler that serves only the wire path: its handleIr refuses at run time, proving the
+     *  Router's fallback to {@link ProxyHandler#handle}. */
+    private static final class LegacyOnlyProvider implements IrHandler, ProxyHandler {
         @Override
         public String id() {
             return "legacy";
+        }
+
+        @Override
+        public IrResponse handleIr(IrRequest request, HandlerCtx ctx) {
+            throw new UnsupportedOperationException("legacy has no handleIr, call handle instead");
         }
 
         @Override
@@ -151,7 +157,7 @@ class IrRouterTest {
 
     /** An IR-native provider whose handleIr always throws (either a {@link HandleIrException} or
      *  a plain exception, per the test), proving the Router's typed-vs-unexpected-throw handling. */
-    private static final class ThrowingIrProvider implements Provider {
+    private static final class ThrowingIrProvider implements IrHandler, ProxyHandler {
         private final String id;
         private final Exception toThrow;
         final AtomicBoolean called = new AtomicBoolean(false);
@@ -178,8 +184,31 @@ class IrRouterTest {
         }
     }
 
+    /** Serves both paths, so a test can assert the IR one is skipped when the profile has no
+     *  translator rather than merely absent. */
+    private static final class IrCapableWireProvider implements IrHandler, ProxyHandler {
+        @Override
+        public String id() {
+            return "ok";
+        }
+
+        @Override
+        public HttpResponse handle(HttpRequest req, HandlerCtx ctx) {
+            HttpResponse resp = new HttpResponse();
+            resp.status = 200;
+            resp.headers = new HashMap<>();
+            resp.body = "served " + ctx.model;
+            return resp;
+        }
+
+        @Override
+        public IrResponse handleIr(IrRequest request, HandlerCtx ctx) {
+            throw new AssertionError("handleIr must never be called when the profile has no translator");
+        }
+    }
+
     private static Translator testTranslator() {
-        return new TestTranslator(new TestJsonCodec());
+        return new TestTranslator(new SimpleJsonCodec());
     }
 
     @Test
@@ -187,8 +216,8 @@ class IrRouterTest {
         InMemoryStore store = new InMemoryStore();
         store.put(CONFIG_FILE, "{\"modelMap\":{\"opus\":[{\"provider\":\"ok\",\"model\":\"m-ok\"}]}}");
         RoutingProfile profile = testProfile(testTranslator());
-        HandlerResolver resolver = HandlerResolvers.fromProviders(
-                Collections.singletonList((Provider) new EchoIrProvider("ok")));
+        HandlerResolver resolver = HandlerResolvers.fromHandlers(
+                Collections.singletonList((IrHandler) new EchoIrProvider("ok")));
         RouterOptions opts = baseOptions(store, profile, resolver, Collections.singletonList("ok"));
 
         String wireRequest = "{\"model\":\"claude-opus-4-1\",\"messages\":"
@@ -210,8 +239,8 @@ class IrRouterTest {
         InMemoryStore store = new InMemoryStore();
         store.put(CONFIG_FILE, "{\"modelMap\":{\"opus\":[{\"provider\":\"legacy\",\"model\":\"m-legacy\"}]}}");
         RoutingProfile profile = testProfile(testTranslator());
-        HandlerResolver resolver = HandlerResolvers.fromProviders(
-                Collections.singletonList((Provider) new LegacyOnlyProvider()));
+        HandlerResolver resolver = HandlerResolvers.fromHandlers(
+                Collections.singletonList((IrHandler) new LegacyOnlyProvider()));
         RouterOptions opts = baseOptions(store, profile, resolver, Collections.singletonList("legacy"));
 
         String wireRequest = "{\"model\":\"claude-opus-4-1\",\"messages\":"
@@ -238,7 +267,7 @@ class IrRouterTest {
                 new HandleIrException(429, new HashMap<>(), "{\"type\":\"error\"}", 5000L));
         ThrowingIrProvider fallback = new ThrowingIrProvider("fallback",
                 new HandleIrException(429, new HashMap<>(), "{\"type\":\"error\"}"));
-        HandlerResolver resolver = HandlerResolvers.fromProviders(Arrays.<Provider>asList(primary, fallback));
+        HandlerResolver resolver = HandlerResolvers.fromHandlers(Arrays.<IrHandler>asList(primary, fallback));
         RouterOptions opts = baseOptions(store, profile, resolver, Arrays.asList("primary", "fallback"));
 
         String wireRequest = "{\"model\":\"claude-opus-4-1\",\"messages\":"
@@ -264,7 +293,7 @@ class IrRouterTest {
                 new HandleIrException(400, new HashMap<>(), "{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\"}}"));
         ThrowingIrProvider fallback = new ThrowingIrProvider("fallback",
                 new RuntimeException("fallback must never be attempted for a non-rate-limit error"));
-        HandlerResolver resolver = HandlerResolvers.fromProviders(Arrays.<Provider>asList(primary, fallback));
+        HandlerResolver resolver = HandlerResolvers.fromHandlers(Arrays.<IrHandler>asList(primary, fallback));
         RouterOptions opts = baseOptions(store, profile, resolver, Arrays.asList("primary", "fallback"));
 
         String wireRequest = "{\"model\":\"claude-opus-4-1\",\"messages\":"
@@ -283,7 +312,7 @@ class IrRouterTest {
         store.put(CONFIG_FILE, "{\"modelMap\":{\"opus\":[{\"provider\":\"ok\",\"model\":\"m-ok\"}]}}");
         RoutingProfile profile = testProfile(testTranslator());
         ThrowingIrProvider ok = new ThrowingIrProvider("ok", new RuntimeException("boom"));
-        HandlerResolver resolver = HandlerResolvers.fromProviders(Collections.singletonList((Provider) ok));
+        HandlerResolver resolver = HandlerResolvers.fromHandlers(Collections.singletonList((IrHandler) ok));
         RouterOptions opts = baseOptions(store, profile, resolver, Collections.singletonList("ok"));
 
         String wireRequest = "{\"model\":\"claude-opus-4-1\",\"messages\":"
@@ -299,27 +328,8 @@ class IrRouterTest {
         InMemoryStore store = new InMemoryStore();
         store.put(CONFIG_FILE, "{\"modelMap\":{\"opus\":[{\"provider\":\"ok\",\"model\":\"m-ok\"}]}}");
         RoutingProfile profile = testProfile(null); // no translator, so the wire handle() path only
-        Provider provider = new Provider() {
-            @Override
-            public String id() {
-                return "ok";
-            }
-
-            @Override
-            public HttpResponse handle(HttpRequest req, HandlerCtx ctx) {
-                HttpResponse resp = new HttpResponse();
-                resp.status = 200;
-                resp.headers = new HashMap<>();
-                resp.body = "served " + ctx.model;
-                return resp;
-            }
-
-            @Override
-            public IrResponse handleIr(IrRequest request, HandlerCtx ctx) {
-                throw new AssertionError("handleIr must never be called when the profile has no translator");
-            }
-        };
-        HandlerResolver resolver = HandlerResolvers.fromProviders(Collections.singletonList(provider));
+        HandlerResolver resolver = HandlerResolvers.fromHandlers(
+                Collections.singletonList((IrHandler) new IrCapableWireProvider()));
         RouterOptions opts = baseOptions(store, profile, resolver, Collections.singletonList("ok"));
 
         String wireRequest = "{\"model\":\"claude-opus-4-1\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}";

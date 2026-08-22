@@ -1,8 +1,7 @@
 import { decodeIr, encodeIrResult, handleIrErrorToResponse } from "./ir-codec.js";
-import type { FrontDoorCapability } from "../core-ir/dist/index.js";
-import type { IrEventStream, IrRequest, IrResponse, RoutingProfile } from "./types.js";
+import type { FrontDoorCapability, IrEventStream, IrRequest, IrResponse, RoutingProfile } from "./types.js";
 
-export type { FrontDoorCapability } from "../core-ir/dist/index.js";
+export type { FrontDoorCapability } from "./types.js";
 
 /**
  * The `front-door` capability for one routing profile.

@@ -8,10 +8,13 @@ import io.github.intisy.ai.shared.logic.RouterOptions;
 import io.github.intisy.ai.shared.routing.Assignment;
 import io.github.intisy.ai.shared.routing.ProxyHandler;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
-import io.github.intisy.ai.shared.spi.HttpClient;
-import io.github.intisy.ai.shared.spi.JsonCodec;
-import io.github.intisy.ai.shared.spi.Store;
-import io.github.intisy.ai.shared.spi.http.HttpResponse;
+import io.github.intisy.ai.api.seam.HttpClient;
+import io.github.intisy.ai.seam.InMemoryStore;
+import io.github.intisy.ai.seam.NoopLogger;
+import io.github.intisy.ai.seam.SimpleJsonCodec;
+import io.github.intisy.ai.api.seam.JsonCodec;
+import io.github.intisy.ai.api.seam.Store;
+import io.github.intisy.ai.api.seam.HttpResponse;
 
 import org.teavm.jso.JSExport;
 import org.teavm.jso.core.JSPromise;
@@ -258,12 +261,11 @@ public final class CoreProxyJs {
     static RouterOptions baseOptions(Store store, Map<String, ProxyHandler> registry) {
         RouterOptions opts = new RouterOptions();
         opts.profile = testProfile();
-        opts.resolveHandler = HandlerResolvers.fromRegistry(registry);
+        opts.resolveHandler = HandlerResolvers.fromWireHandlers(registry);
         opts.store = store;
         opts.json = new SimpleJsonCodec();
         opts.clock = System::currentTimeMillis;
-        opts.log = msg -> {
-        };
+        opts.log = NoopLogger.INSTANCE;
         opts.notify = (message, level) -> {
         };
         opts.listProviders = () -> new java.util.ArrayList<>(registry.keySet());

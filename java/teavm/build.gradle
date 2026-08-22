@@ -6,15 +6,13 @@ plugins {
 }
 
 dependencies {
-    // teavm transpiles the routing engine and, transitively through :routing's api dependency, the
-    // :spi contract types it routes against. Both avoid gson/net/nio for exactly this reason.
+    // teavm transpiles the routing engine and, transitively through :routing's api dependencies,
+    // the vocabulary and the IR seam it routes against. All avoid gson/net/nio for that reason.
     implementation project(":routing")
-    // :routing declares :ir compileOnly, so it is not here transitively; Router references
-    // IrRequest/IrResponse/Translator at run time, so TeaVM needs :ir's classes reachable.
-    implementation project(":ir")
-    // :js-base carries the TeaVM implementations of :spi's host-injected services (SimpleJsonCodec,
-    // JsHttpClientBridge, JsStoreBridge, InMemoryStore), which CoreProxyJs assembles. Embedding a
-    // copy is the point of a TeaVM bundle; sharing the SOURCE is what stops it being duplicated.
+    // :seam and :js-base carry the implementations of the host-injected seams (SimpleJsonCodec,
+    // InMemoryStore, JsHttpClientBridge, JsStoreBridge) that CoreProxyJs assembles. Embedding a copy
+    // is the point of a TeaVM bundle; sharing the SOURCE is what stops it being duplicated.
+    implementation project(":seam")
     implementation project(":js-base")
     teavm teavm.libs.jsoApis
 }

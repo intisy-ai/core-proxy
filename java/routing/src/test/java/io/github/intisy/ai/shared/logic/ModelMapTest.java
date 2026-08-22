@@ -3,8 +3,8 @@ package io.github.intisy.ai.shared.logic;
 import io.github.intisy.ai.shared.routing.Assignment;
 import io.github.intisy.ai.shared.routing.CatalogEntry;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
-import io.github.intisy.ai.shared.store.InMemoryStore;
-import io.github.intisy.ai.shared.store.TestJsonCodec;
+import io.github.intisy.ai.seam.InMemoryStore;
+import io.github.intisy.ai.seam.SimpleJsonCodec;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises {@link ModelMap} over the {@link InMemoryStore} + {@link TestJsonCodec} SPI fakes.
+ * Exercises {@link ModelMap} over the {@link InMemoryStore} + {@link SimpleJsonCodec} SPI fakes.
  */
 class ModelMapTest {
 
@@ -77,7 +77,7 @@ class ModelMapTest {
     @Test
     void readModelMap_readsModelMapFieldFromConfigFile() {
         InMemoryStore store = new InMemoryStore();
-        TestJsonCodec json = new TestJsonCodec();
+        SimpleJsonCodec json = new SimpleJsonCodec();
         RoutingProfile p = testProfile();
         store.put(p.configFile, "{\"modelMap\":{\"opus\":{\"provider\":\"antigravity\",\"model\":\"m-opus\"}}}");
 
@@ -88,7 +88,7 @@ class ModelMapTest {
     @Test
     void readModelMap_missingFile_returnsEmptyMap() {
         InMemoryStore store = new InMemoryStore();
-        TestJsonCodec json = new TestJsonCodec();
+        SimpleJsonCodec json = new SimpleJsonCodec();
         Map<String, Object> map = ModelMap.readModelMap(store, json, testProfile());
         assertNotNull(map);
         assertTrue(map.isEmpty());
@@ -99,7 +99,7 @@ class ModelMapTest {
     @Test
     void catalogEntries_readsFromModelsCache() {
         InMemoryStore store = new InMemoryStore();
-        TestJsonCodec json = new TestJsonCodec();
+        SimpleJsonCodec json = new SimpleJsonCodec();
         store.put("models.json", "{\"antigravity\":{\"models\":{\"m-opus\":{\"name\":\"M Opus\",\"limit\":{\"context\":200000,\"output\":8192}}},\"ranking\":[\"m-opus\"]}}");
 
         List<CatalogEntry> entries = ModelMap.catalogEntries(store, json, Collections.singletonList("antigravity"));
@@ -114,7 +114,7 @@ class ModelMapTest {
     @Test
     void catalogEntries_providerWithNoCache_isSkipped() {
         InMemoryStore store = new InMemoryStore();
-        TestJsonCodec json = new TestJsonCodec();
+        SimpleJsonCodec json = new SimpleJsonCodec();
         List<CatalogEntry> entries = ModelMap.catalogEntries(store, json, Collections.singletonList("unknown-provider"));
         assertTrue(entries.isEmpty());
     }
@@ -124,7 +124,7 @@ class ModelMapTest {
     @Test
     void resolveModelMap_honorsExplicitTierMapping_andDefaultIsNonNull() {
         InMemoryStore store = new InMemoryStore();
-        TestJsonCodec json = new TestJsonCodec();
+        SimpleJsonCodec json = new SimpleJsonCodec();
         RoutingProfile p = testProfile();
         store.put(p.configFile, "{\"modelMap\":{\"opus\":{\"provider\":\"antigravity\",\"model\":\"m-opus\"}}}");
         store.put("models.json", "{\"antigravity\":{\"models\":{\"m-opus\":{\"name\":\"M Opus\"}},\"ranking\":[\"m-opus\"]}}");
@@ -142,7 +142,7 @@ class ModelMapTest {
     @Test
     void resolveModelMap_staleProviderModel_healsWithinSameProvider() {
         InMemoryStore store = new InMemoryStore();
-        TestJsonCodec json = new TestJsonCodec();
+        SimpleJsonCodec json = new SimpleJsonCodec();
         RoutingProfile p = testProfile();
         // stored mapping points at a model that no longer exists for antigravity
         store.put(p.configFile, "{\"modelMap\":{\"opus\":{\"provider\":\"antigravity\",\"model\":\"m-opus-old\"}}}");
@@ -164,7 +164,7 @@ class ModelMapTest {
     @Test
     void resolveModelMap_suppliedCatalogKey_resolvesAProviderAbsentFromModelsJson() {
         InMemoryStore store = new InMemoryStore();
-        TestJsonCodec json = new TestJsonCodec();
+        SimpleJsonCodec json = new SimpleJsonCodec();
         RoutingProfile p = testProfile();
         // "newprov" has no models.json entry at all: without the supplied catalog key it would be
         // completely invisible to resolveModelMap (cachedProviderIds only reads models.json).
@@ -187,7 +187,7 @@ class ModelMapTest {
         // No "catalog" key at all (the JVM backend's real usage): behavior must be identical to
         // before the catalog key existed, proving ai-java is unaffected.
         InMemoryStore store = new InMemoryStore();
-        TestJsonCodec json = new TestJsonCodec();
+        SimpleJsonCodec json = new SimpleJsonCodec();
         RoutingProfile p = testProfile();
         store.put(p.configFile, "{\"modelMap\":{\"opus\":{\"provider\":\"antigravity\",\"model\":\"m-opus\"}}}");
         store.put("models.json", "{\"antigravity\":{\"models\":{\"m-opus\":{\"name\":\"M Opus\"}},\"ranking\":[\"m-opus\"]}}");
@@ -205,7 +205,7 @@ class ModelMapTest {
     @Test
     void modelEnvPairs_containsDefaultOpusModel() {
         InMemoryStore store = new InMemoryStore();
-        TestJsonCodec json = new TestJsonCodec();
+        SimpleJsonCodec json = new SimpleJsonCodec();
         RoutingProfile p = testProfile();
         store.put(p.configFile, "{\"modelMap\":{\"opus\":{\"provider\":\"antigravity\",\"model\":\"m-opus\"}}}");
         store.put("models.json", "{\"antigravity\":{\"models\":{\"m-opus\":{\"name\":\"M Opus\"}},\"ranking\":[\"m-opus\"]}}");

@@ -4,13 +4,13 @@ import io.github.intisy.ai.ir.IrRequest;
 import io.github.intisy.ai.ir.IrResponse;
 import io.github.intisy.ai.shared.routing.Assignment;
 import io.github.intisy.ai.shared.routing.CatalogEntry;
-import io.github.intisy.ai.shared.routing.HandleIrException;
-import io.github.intisy.ai.shared.routing.HandlerCtx;
-import io.github.intisy.ai.shared.routing.Provider;
+import io.github.intisy.ai.ir.spi.HandleIrException;
+import io.github.intisy.ai.ir.spi.HandlerCtx;
+import io.github.intisy.ai.ir.spi.IrHandler;
 import io.github.intisy.ai.shared.routing.ProxyHandler;
-import io.github.intisy.ai.shared.spi.JsonCodec;
-import io.github.intisy.ai.shared.spi.http.HttpRequest;
-import io.github.intisy.ai.shared.spi.http.HttpResponse;
+import io.github.intisy.ai.api.seam.JsonCodec;
+import io.github.intisy.ai.api.seam.HttpRequest;
+import io.github.intisy.ai.api.seam.HttpResponse;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -62,11 +62,11 @@ public final class Router {
         long resetMs = 0;
         for (int i = 0; i < chain.size(); i++) {
             Assignment assigned = chain.get(i);
-            ProxyHandler handler;
+            IrHandler handler;
             try {
                 handler = opts.resolveHandler.resolve(assigned.provider);
             } catch (Exception e) {
-                log(opts, "handler load failed for " + assigned.provider + ": " + e.getMessage());
+                warn(opts, "handler load failed for " + assigned.provider + ": " + e.getMessage());
                 handler = null;
             }
             if (handler == null) {
@@ -76,13 +76,13 @@ public final class Router {
             HandlerCtx ctx = new HandlerCtx(opts.configDir, opts.store, opts.log, assigned.model);
             HttpResponse resp = null;
             boolean handled = false;
-            // Prefer the IR path when both sides support it: this profile decoded an IR request and
-            // the resolved handler is a Provider that overrides handleIr. A Provider that only
-            // implements handle() throws UnsupportedOperationException (Provider's default), caught
-            // below and treated as "no IR path here", falling through to the handle() call.
-            if (ir != null && handler instanceof Provider) {
+            // Prefer the IR path: this profile decoded an IR request and every resolved handler
+            // serves handleIr. A handler that declares IR support but refuses at run time throws
+            // UnsupportedOperationException, caught below and treated as "no IR path here", falling
+            // through to the app-wire call that only a ProxyHandler offers.
+            if (ir != null) {
                 try {
-                    IrResponse irResp = ((Provider) handler).handleIr(ir, ctx);
+                    IrResponse irResp = handler.handleIr(ir, ctx);
                     resp = wireResponse(opts.profile.translator.encodeResponse(irResp));
                     handled = true;
                 } catch (UnsupportedOperationException notIrCapable) {
@@ -102,16 +102,21 @@ public final class Router {
                     handled = true;
                 } catch (Exception e) {
                     // Unexpected throw: a genuine bug, not a modeled transport outcome.
-                    log(opts, "handleIr error for " + assigned.provider + ": " + e.getMessage());
+                    warn(opts, "handleIr error for " + assigned.provider + ": " + e.getMessage());
                     lastResp = errorResponse(502, "Provider handler failed: " + e.getMessage(), opts.json);
                     continue;
                 }
             }
             if (!handled) {
+                if (!(handler instanceof ProxyHandler)) {
+                    lastResp = errorResponse(502, "Provider '" + assigned.provider
+                            + "' serves no app-wire path and its IR path did not run.", opts.json);
+                    continue;
+                }
                 try {
-                    resp = handler.handle(req, ctx);
+                    resp = ((ProxyHandler) handler).handle(req, ctx);
                 } catch (Exception e) {
-                    log(opts, "handler error for " + assigned.provider + ": " + e.getMessage());
+                    warn(opts, "handler error for " + assigned.provider + ": " + e.getMessage());
                     lastResp = errorResponse(502, "Provider handler failed: " + e.getMessage(), opts.json);
                     continue;
                 }
@@ -120,7 +125,7 @@ public final class Router {
             if (RateLimit.isRateLimited(resp)) {
                 long ms = RateLimit.rateLimitResetMs(resp, opts.clock.now());
                 if (ms > resetMs) resetMs = ms;
-                log(opts, "rate-limited on " + assigned.provider + "/" + assigned.model + ", trying next fallback");
+                warn(opts, "rate-limited on " + assigned.provider + "/" + assigned.model + ", trying next fallback");
                 continue;
             }
             // Never switch the user silently: announce when a fallback (not the primary) served.
@@ -143,8 +148,12 @@ public final class Router {
         if (opts.notify != null) opts.notify.notify(message, level);
     }
 
-    private static void log(RouterOptions opts, String message) {
-        if (opts.log != null) opts.log.log(message);
+    /**
+     * @implNote Warn rather than info: every call site is a failure the router recovered from by
+     * falling back, which is exactly what the level means.
+     */
+    private static void warn(RouterOptions opts, String message) {
+        if (opts.log != null) opts.log.warn(message);
     }
 
     private static String displayName(Assignment a) {
@@ -250,7 +259,7 @@ public final class Router {
         try {
             return opts.profile.translator.decodeRequest(req.body);
         } catch (Exception e) {
-            log(opts, "IR decode failed, falling back to wire routing: " + e.getMessage());
+            warn(opts, "IR decode failed, falling back to wire routing: " + e.getMessage());
             return null;
         }
     }
