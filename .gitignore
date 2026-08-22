@@ -7,10 +7,9 @@ docs/
 graphify-out/
 
 # java/ (Gradle + TeaVM module)
-java/**/build/
-java/.gradle/
-java/**/.gradle/
-java/.idea/
+**/build/
+.gradle/
+**/.gradle/
 *.iml
 
 # TeaVM-generated JS, staged by build:teavm -- the .d.ts alongside it is hand-authored and committed

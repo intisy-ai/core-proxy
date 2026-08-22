@@ -29,10 +29,10 @@
   },
   "scripts": {
     "build": "npm --prefix core-ir install && npm --prefix core-ir run build && npm run build:teavm && tsc && node copy-generated.mjs",
-    "build:teavm": "node teavm-build.mjs --java-dir java --module :teavm --out src/generated/core-proxy.teavm.js",
+    "build:teavm": "node teavm-build.mjs --java-dir . --module :teavm --out src/generated/core-proxy.teavm.js",
     "test": "vitest run",
     "prepublishOnly": "npm run build",
-    "emit": "node core-ir/api/scripts/emit-dts.mjs --java-dir java --module :proxy-contracts --module-dir proxy-contracts --out src/generated"
+    "emit": "node core-ir/api/scripts/emit-dts.mjs --java-dir . --module :proxy-contracts --module-dir proxy-contracts --out src/generated"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

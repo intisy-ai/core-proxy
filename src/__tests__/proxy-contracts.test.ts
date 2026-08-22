@@ -16,7 +16,7 @@ it("keeps the committed front-door key identical to what the java emits", () => 
   const scratch = mkdtempSync(join(tmpdir(), "proxy-contracts-"));
   execFileSync(process.execPath, [
     join(repo, "core-ir", "api", "scripts", "emit-dts.mjs"),
-    "--java-dir", join(repo, "java"),
+    "--java-dir", repo,
     "--module", ":proxy-contracts",
     "--module-dir", "proxy-contracts",
     "--out", scratch,
