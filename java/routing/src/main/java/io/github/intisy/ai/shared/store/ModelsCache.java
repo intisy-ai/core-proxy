@@ -2,6 +2,7 @@ package io.github.intisy.ai.shared.store;
 
 import io.github.intisy.ai.api.seam.JsonCodec;
 import io.github.intisy.ai.api.seam.Store;
+import io.github.intisy.ai.seam.JsonUtil;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

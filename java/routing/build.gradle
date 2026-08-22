@@ -11,7 +11,7 @@ dependencies {
     // HandlerResolver's own signature names IrHandler, so a consumer needs it resolvable too.
     api project(":ir")
 
-    // api's seam implementations stand in for a host's, so the engine's tests exercise the same
-    // Store and JsonCodec every other consumer is handed rather than a local double.
-    testImplementation project(":seam")
+    // :seam carries the JSON narrowing helpers ModelsCache hand-rolls its Map<->POJO conversion
+    // through, and the seam implementations the tests exercise instead of a local double.
+    implementation project(":seam")
 }
