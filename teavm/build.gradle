@@ -1,0 +1,48 @@
+import org.teavm.gradle.api.JSModuleType
+import org.teavm.gradle.api.OptimizationLevel
+
+plugins {
+    id "org.teavm" version "0.15.0"
+}
+
+dependencies {
+    // teavm transpiles the routing engine and, transitively through :routing's api dependencies,
+    // the vocabulary and the IR seam it routes against. All avoid gson/net/nio for that reason.
+    implementation project(":routing")
+    // :seam and :js-base carry the implementations of the host-injected seams (SimpleJsonCodec,
+    // InMemoryStore, JsHttpClientBridge, JsStoreBridge) that CoreProxyJs assembles. Embedding a copy
+    // is the point of a TeaVM bundle; sharing the SOURCE is what stops it being duplicated.
+    implementation project(":seam")
+    implementation project(":js-base")
+    teavm teavm.libs.jsoApis
+}
+
+// The root subprojects{} block pins Java 8 (sourceCompatibility/targetCompatibility +
+// compileJava --release 8) for portability of :routing. TeaVM 0.15.0's own classlib/jso-apis/
+// extension-spi artifacts publish a minimum JVM-version metadata of 11-17, so :teavm needs a
+// newer compile target than :routing, overriding both the extension's compatibility (fixes
+// Gradle's dependency-resolution JVM-version attribute matching) and the compileJava task's
+// --release option (which the root block sets via tasks.matching{}.configureEach{}, applied
+// before this script runs, last-registered-wins). Mirrors ai-java's js/build.gradle exactly.
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+tasks.named("compileJava") {
+    options.release = 17
+}
+
+// Same JVM-version attribute matching problem as compileJava, now that the root block also
+// pins compileTestJava to release 8: this module's test dependencies (teavm-junit) require 17.
+tasks.named("compileTestJava") {
+    options.release = 17
+}
+
+teavm.js {
+    mainClass = "io.github.intisy.ai.js.CoreProxyJs"
+    moduleType = JSModuleType.ES2015
+    obfuscated = false
+    optimization = OptimizationLevel.NONE
+    targetFileName = "core-proxy.js"
+}

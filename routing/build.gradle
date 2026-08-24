@@ -1,0 +1,17 @@
+// The routing engine: Router/ModelMap/RateLimit/HandlerResolvers/Notifier. Zero-dependency by design
+// (no gson/java.net/java.nio/reflection/threads) so this module transpiles cleanly under TeaVM.
+dependencies {
+    // :proxy-contracts is the routing vocabulary the engine routes against, and it is an `api`
+    // dependency rather than `implementation` because Router's own signatures name its types: a
+    // consumer that compiles against :routing needs them on its compile classpath too.
+    api project(":proxy-contracts")
+
+    // core-ir's IR types, handler seam and Translator SPI: Router resolves an IrHandler and carries
+    // IR alongside the HttpRequest/HttpResponse path. `api` rather than compileOnly because
+    // HandlerResolver's own signature names IrHandler, so a consumer needs it resolvable too.
+    api project(":ir")
+
+    // :seam carries the JSON narrowing helpers ModelsCache hand-rolls its Map<->POJO conversion
+    // through, and the seam implementations the tests exercise instead of a local double.
+    implementation project(":seam")
+}

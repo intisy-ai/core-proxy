@@ -1,0 +1,86 @@
+plugins {
+    id "io.github.intisy.github-gradle" version "1.8.2.1" apply false
+}
+
+// core-proxy's Java module: a self-contained Gradle build living alongside core-proxy's TS
+// (../src, ../package.json). Does not reuse ai-java's root build.gradle (its
+// io.github.intisy.online-gradle plugin is ai-java-repo-specific, out of
+// scope here); just plain java-library + JUnit, matching this module's only job:
+// compile + test the SPIs/routing/logic, and TeaVM-transpile them to JS.
+subprojects {
+    apply plugin: "java-library"
+    apply plugin: "io.github.intisy.github-gradle"
+
+    group = "io.github.intisy"
+    // publishGithub requires a concrete version. Derive it from -Partifact_version=<tag> passed by
+    // CI (stripping a leading "v"), falling back to a local dev version, the ecosystem derivation.
+    version = (project.findProperty("artifact_version") ?: "0.0.0-dev").toString().replaceFirst(/^v/, "")
+
+    github {
+        accessToken = System.getenv("GITHUB_TOKEN") ?: ""
+    }
+
+    repositories {
+        mavenLocal()
+        mavenCentral()
+    }
+
+    java {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+
+        // 17 is which JDK COMPILES; options.release = 8 below is which JVM RUNS the output. The
+        // floor is 17 because TeaVM 0.15.0's artifacts publish minimum-JVM metadata above 8.
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(17)
+        }
+    }
+
+    // All Java source, main and test alike, must stay within the JDK 1.8 API surface; javac enforces it.
+    tasks.matching { it.name == "compileJava" || it.name == "compileTestJava" }.configureEach {
+        options.release = 8
+    }
+
+    dependencies {
+        testImplementation "org.junit.jupiter:junit-jupiter:5.10.1"
+    }
+
+    test {
+        useJUnitPlatform()
+    }
+}
+
+// The modules a downstream java repo resolves, mapped to the classifier its coordinate names.
+// Per module rather than one shaded jar, because they serve different gradle configurations and
+// shading would put every module on every consumer's classpath.
+ext.PUBLISHED_MODULES = [
+    ":routing": "routing",
+    ":proxy-contracts": "proxy-contracts",
+]
+
+configure(subprojects.findAll { PUBLISHED_MODULES.containsKey(it.path) }) {
+    jar {
+        archiveVersion = ""
+    }
+
+    publishGithub {
+        // These modules sit inside this repo with no .git of their own, so the default git-remote
+        // lookup fails; owner/repo also drive the uploaded asset name (core-proxy-<classifier>.jar).
+        owner = "intisy-ai"
+        repo = "core-proxy"
+        releaseName = "core-proxy ${project.findProperty('artifact_version') ?: project.version}"
+        artifacts {
+            artifact {
+                classifier = PUBLISHED_MODULES[project.path]
+                jar = file("build/libs/${project.name}.jar")
+            }
+        }
+    }
+}
+
+// A publish fanned out to every subproject would fail on the ones with no artifacts declared.
+subprojects {
+    tasks.matching { it.name == "publishGithub" }.configureEach {
+        onlyIf { project.path in rootProject.PUBLISHED_MODULES.keySet() }
+    }
+}

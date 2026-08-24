@@ -30,3 +30,7 @@ export { createProxyServer } from "./server.js";
 
 export { serveIr } from "./serve-ir.js";
 export type { ServeIrOptions } from "./serve-ir.js";
+
+export { frontDoor } from "./front-door.js";
+export type { FrontDoorCapability } from "./front-door.js";
+export { FRONT_DOOR } from "./generated/proxy-contracts.keys.js";

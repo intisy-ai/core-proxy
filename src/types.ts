@@ -165,3 +165,23 @@ export function isValidProfile(p: any): p is RoutingProfile {
     typeof p.nativeRateLimit === "function"
   );
 }
+
+/**
+ * Owns one app's wire format: the seam between what an app sends and the canonical IR everything
+ * downstream carries.
+ *
+ * @remarks
+ * Hand-written rather than emitted from Java, for the same reason `IrEventStream` above is: every
+ * type in it is a web-platform global (`Request`, `Response`) or a TypeScript union, so a Java
+ * declaration would carry none of the contract and the annotations would carry all of it. The Java
+ * side's equivalent seam is the proxy handler's `HttpRequest`/`HttpResponse` pair, which is a
+ * different contract over a different transport abstraction, not this one spelled differently.
+ */
+export interface FrontDoorCapability {
+  /** Decodes an app request into IR, or returns null when the request is not one to route. */
+  decode(request: Request): Promise<IrRequest | null>;
+  /** Encodes an IR result back into the app's wire format. */
+  encode(result: IrResponse | IrEventStream): Promise<Response>;
+  /** Rebuilds a wire response from a thrown handler error, or returns null when it cannot. */
+  encodeError(error: unknown): Response | null;
+}

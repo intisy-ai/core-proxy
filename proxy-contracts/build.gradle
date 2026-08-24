@@ -1,0 +1,22 @@
+// The routing vocabulary a proxy plugin implements, and the front-door key core-proxy mints. Kept
+// apart from :routing so a plugin implementing ProxyHandler or ProxyPlugin does not link the engine.
+//
+// Every dependency is compileOnly: the annotations are SOURCE-retention, the api contract supplies
+// the seam and typed-key interfaces, and :ir supplies types this module names but never constructs.
+dependencies {
+    compileOnly project(":annotations")
+    compileOnly project(":contract")
+    compileOnly project(":ir")
+    annotationProcessor project(":processor")
+}
+
+tasks.named("compileJava") {
+    options.compilerArgs += [
+        "-Atsemit.name=proxy-contracts",
+        "-Atsemit.ext=.ts",
+        // Relative paths into the submodules rather than package specifiers: this repo reaches api
+        // and core-ir the same way its hand-written sources do.
+        "-Atsemit.keys=../../core-ir/api/generated/api.js",
+        "-Atsemit.imports=../types.js=FrontDoorCapability",
+    ]
+}

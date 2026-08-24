@@ -1,15 +1,16 @@
-// Proves the proxy server's IR front door end to end using core-ir's real AnthropicTranslator (not
-// a mock): inbound Anthropic wire is decoded to the canonical IR, routed on IrRequest.model, handed
-// to a handleIr-capable handler, and the IrResponse / IR event stream it returns is encoded back to
-// Anthropic wire (JSON body / SSE). A handle()-only handler still serves via the fallback, even when
-// the profile has a translator.
+// Proves the proxy server's IR front door end to end through an injected VendorTranslator fake:
+// inbound wire is decoded to the canonical IR, routed on IrRequest.model, handed to a
+// handleIr-capable handler, and the IrResponse / IR event stream it returns is encoded back to
+// wire (JSON body / streamed text). A handle()-only handler still serves via the fallback, even
+// when the profile has a translator. A concrete vendor's wire syntax is that vendor's own
+// *-translator repo's job, not this engine's.
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createProxyServer } from "./server.js";
 import { HandleIrError } from "./types.js";
-import { translators } from "../core-ir/dist/index.js";
+import { makeFakeTranslator } from "./__tests__/fake-translator.js";
 import type { IrRequest, IrResponse, IrStreamEvent } from "../core-ir/dist/index.js";
 
 const profile = {
@@ -17,13 +18,13 @@ const profile = {
   tierOrder: ["opus"], tierFallback: ["opus"], tierRegex: /^claude-([a-z]+)-\d/, envPrefix: "ANTHROPIC",
   defaultContext: 200000, defaultOutput: 64000,
   nativeRateLimit: async () => ({ status: 429, headers: { "content-type": "application/json" }, body: JSON.stringify({ type: "error", error: { type: "rate_limit_error" } }) }),
-  translator: translators.anthropic,
+  translator: makeFakeTranslator(),
 } as any;
 
 const wireRequest = JSON.stringify({
   model: "claude-opus-4-1",
   max_tokens: 100,
-  messages: [{ role: "user", content: "hi there" }],
+  messages: [{ role: "user", content: [{ kind: "text", text: "hi there" }] }],
   stream: false,
 });
 
@@ -66,13 +67,13 @@ it("decodes app wire -> IR, routes, calls handleIr, and encodes the IrResponse b
   const r = await fetch(`http://127.0.0.1:${port}/v1/messages`, { method: "POST", body: wireRequest });
   expect(r.status).toBe(200);
   const wireBody = await r.text();
-  const decoded = await translators.anthropic.decodeResponse(wireBody);
+  const decoded = await profile.translator.decodeResponse(wireBody);
   expect(decoded.model).toBe("m-ok"); // ctx.model is the assigned model, matching the handle() contract
   expect(decoded.stopReason).toBe("end_turn");
   expect(decoded.content[0]).toMatchObject({ kind: "text", text: "handled via IR (ok): hi there" });
 });
 
-it("streams: an IR event stream from handleIr is encoded to real Anthropic SSE, chunk by chunk", async () => {
+it("streams: an IR event stream from handleIr is piped through the translator's encodeStream, chunk by chunk", async () => {
   writeFileSync(join(dir, "config", "claude-code-loader.json"), JSON.stringify({ modelMap: { opus: [{ provider: "ok", model: "m-ok" }] } }));
   const handlers: any = {
     ok: {
@@ -98,12 +99,11 @@ it("streams: an IR event stream from handleIr is encoded to real Anthropic SSE, 
   });
   expect(r.status).toBe(200);
   expect(r.headers.get("content-type")).toBe("text/event-stream");
-  const sse = await r.text();
-  expect(sse).toContain("event: message_start");
-  expect(sse).toContain("event: content_block_delta");
-  expect(sse).toContain("hello");
-  expect(sse).toContain(" world");
-  expect(sse).toContain("event: message_stop");
+  const body = await r.text();
+  expect(body).toContain('"event":"message_start"');
+  expect(body).toContain("hello");
+  expect(body).toContain(" world");
+  expect(body).toContain('"event":"message_stop"');
 });
 
 it("legacy handle()-only handler still serves via the fallback, even though the profile has a translator", async () => {
