@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { serveIr } from "./serve-ir.js";
 import { makeFakeTranslator } from "./__tests__/fake-translator.js";
-import type { IrRequest, IrResponse, IrStreamEvent } from "../core-ir/dist/index.js";
+import type { IrRequest, IrResponse, IrStreamEvent } from "@intisy-ai/core-ir";
 
 const profile = { translator: makeFakeTranslator() } as any;
 const ctx = { configDir: "/tmp", log: () => {}, model: "m-ok", provider: "p" } as any;

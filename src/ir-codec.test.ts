@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { decodeIr, encodeIrResult, handleIrErrorToResponse } from "./ir-codec.js";
 import { makeFakeTranslator } from "./__tests__/fake-translator.js";
-import type { IrResponse } from "../core-ir/dist/index.js";
+import type { IrResponse } from "@intisy-ai/core-ir";
 
 const profile = { translator: makeFakeTranslator() } as any;
 const wire = JSON.stringify({ model: "claude-x", max_tokens: 16, messages: [{ role: "user", content: "hi" }] });

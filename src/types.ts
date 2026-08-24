@@ -1,9 +1,8 @@
 // Canonical IR types and the per-vendor translator API, imported type-only so they erase at
 // build time: core-proxy's compiled dist never imports core-ir at runtime; only a caller that
-// constructs a translator instance (a profile or a test) pulls in the real module. core-ir is a
-// submodule (./core-ir), reached in Java via java/settings.gradle's :ir alias.
-import type { IrRequest, IrResponse, IrStreamEvent, VendorTranslator } from "../core-ir/dist/index.js";
-export type { IrRequest, IrResponse, IrStreamEvent, VendorTranslator } from "../core-ir/dist/index.js";
+// constructs a translator instance (a profile or a test) pulls in the real module.
+import type { IrRequest, IrResponse, IrStreamEvent, VendorTranslator } from "@intisy-ai/core-ir";
+export type { IrRequest, IrResponse, IrStreamEvent, VendorTranslator } from "@intisy-ai/core-ir";
 
 export type HandlerCtx = {
   configDir: string;

@@ -14,25 +14,13 @@ include ":teavm"
 // :seam and :js-base - api's implementations of the layer-1 seams the engine is handed
 // (SimpleJsonCodec, InMemoryStore) and their TeaVM bridges, reached through core-ir's own api
 // submodule so every module in this build resolves api at the same coordinates.
-include ":seam"
-project(":seam").projectDir = file("core-ir/api/seam")
-include ":js-base"
-project(":js-base").projectDir = file("core-ir/api/js-base")
 
 // :annotations, :processor and :contract come from api, reached the same way, because :ir exports
 // api's seam types in HandlerCtx's public fields and :proxy-contracts emits its own TypeScript.
-include ":annotations"
-project(":annotations").projectDir = file("core-ir/api/annotations")
-include ":processor"
-project(":processor").projectDir = file("core-ir/api/processor")
-include ":contract"
-project(":contract").projectDir = file("core-ir/api/contract")
 
 // :ir - core-ir's canonical IR types, the handler seam the engine routes over, and the vendor
 // translators, from THIS repo's own core-ir submodule, which is also what src/types.ts imports.
 // One :ir per build, and no drift between core-proxy's Java and TypeScript views of core-ir.
-include ":ir"
-project(":ir").projectDir = file("core-ir/ir")
 
 // :proxy-contracts - the routing vocabulary a proxy plugin implements, and the front-door key this
 // repo mints. Apart from :routing so a plugin implementing it does not link the engine.

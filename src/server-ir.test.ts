@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { createProxyServer } from "./server.js";
 import { HandleIrError } from "./types.js";
 import { makeFakeTranslator } from "./__tests__/fake-translator.js";
-import type { IrRequest, IrResponse, IrStreamEvent } from "../core-ir/dist/index.js";
+import type { IrRequest, IrResponse, IrStreamEvent } from "@intisy-ai/core-ir";
 
 const profile = {
   configFile: "claude-code-loader.json", routingKey: "providerRouting", tierSourceProvider: "claude-code",
