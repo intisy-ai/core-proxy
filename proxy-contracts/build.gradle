@@ -17,7 +17,7 @@ tasks.named("compileJava") {
         "-Atsemit.ext=.ts",
         // Relative paths into the submodules rather than package specifiers: this repo reaches api
         // and core-ir the same way its hand-written sources do.
-        "-Atsemit.keys=../../core-ir/api/generated/api.js",
+        "-Atsemit.keys=@intisy-ai/api/contract",
         "-Atsemit.imports=../types.js=FrontDoorCapability",
     ]
 }

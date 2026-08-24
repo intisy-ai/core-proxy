@@ -1,4 +1,4 @@
-import type { IrRequest, IrResponse, IrStreamEvent, VendorTranslator } from "../../core-ir/dist/index.js";
+import type { IrRequest, IrResponse, IrStreamEvent, VendorTranslator } from "@intisy-ai/core-ir";
 
 /**
  * A deterministic {@link VendorTranslator} for exercising core-proxy's own codec/routing logic
