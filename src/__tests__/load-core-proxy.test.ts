@@ -13,5 +13,5 @@ it("initCoreProxy resolves the generated module once and getCoreProxy reads it b
   await initCoreProxy();
   const b = getCoreProxy();
   expect(a).toBe(b);
-  expect(typeof (a as Record<string, unknown>).rateLimitResetMsJson).toBe("function");
+  expect(typeof (a as Record<string, unknown>).routeRequest).toBe("function");
 });

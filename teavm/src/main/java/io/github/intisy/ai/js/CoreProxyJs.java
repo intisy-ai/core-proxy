@@ -2,7 +2,6 @@ package io.github.intisy.ai.js;
 
 import io.github.intisy.ai.shared.logic.HandlerResolvers;
 import io.github.intisy.ai.shared.logic.ModelMap;
-import io.github.intisy.ai.shared.logic.RateLimit;
 import io.github.intisy.ai.shared.logic.Router;
 import io.github.intisy.ai.shared.logic.RouterOptions;
 import io.github.intisy.ai.shared.routing.Assignment;
@@ -64,32 +63,6 @@ public final class CoreProxyJs {
     public static String jsonRoundTrip(String json) {
         JsonCodec codec = new SimpleJsonCodec();
         return codec.stringify(codec.parse(json));
-    }
-
-    /**
-     * {@code RateLimit.rateLimitResetMs} export: {@code argsJson} is
-     * {@code {"headers":{...},"now":long}}. Returns the bare JSON number result.
-     */
-    @JSExport
-    public static String rateLimitResetMsJson(String argsJson) {
-        JsonCodec json = new SimpleJsonCodec();
-        Map<?, ?> args = (Map<?, ?>) json.parse(argsJson);
-        long now = toLong(args.get("now"));
-
-        Map<String, String> headers = new HashMap<>();
-        Object headersObj = args.get("headers");
-        if (headersObj instanceof Map) {
-            for (Map.Entry<?, ?> e : ((Map<?, ?>) headersObj).entrySet()) {
-                headers.put(String.valueOf(e.getKey()), String.valueOf(e.getValue()));
-            }
-        }
-        HttpResponse resp = new HttpResponse();
-        resp.status = 200;
-        resp.headers = headers;
-        resp.body = "";
-
-        long result = RateLimit.rateLimitResetMs(resp, now);
-        return json.stringify(result);
     }
 
     /**

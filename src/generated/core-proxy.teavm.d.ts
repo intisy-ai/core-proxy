@@ -17,7 +17,6 @@ export type CoreProxyJsHttpSend = (requestJson: string) => Promise<string>;
 
 export function routeJsonSync(storeJson: string, requestJson: string): string;
 export function jsonRoundTrip(json: string): string;
-export function rateLimitResetMsJson(argsJson: string): string;
 export function resolveTiersJson(profileJson: string, storeJson: string): string;
 export function resolveModelMapJson(profileJson: string, storeJson: string): string;
 export function resolveTiers(profileJson: string, jsStore: CoreProxyJsStore): string;
