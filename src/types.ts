@@ -39,18 +39,18 @@ export type ProxyHandler = {
 
 /**
  * The typed transport error a handleIr implementation throws for a non-2xx upstream outcome
- * (rate limit, bad request, etc.), carrying status/headers/body so the front door (server.ts
- * route()) can reconstruct an equivalent Response and feed it through the same isRateLimited/
- * rateLimitResetMs/fallback/final-429-synthesis logic used for any Response, instead of collapsing
- * every throw to a flat 502. A throw that is not a HandleIrError is a genuine unexpected failure
+ * (rate limit, bad request, etc.), carrying status/headers/body so the front door can reconstruct
+ * an equivalent Response and feed it through the router's own rate-limit detection, fallback and
+ * final-429 synthesis, the same path any Response takes, instead of collapsing every throw to a
+ * flat 502. A throw that is not a HandleIrError is a genuine unexpected failure
  * and stays a flat 502.
  */
 export class HandleIrError extends Error {
   status: number;
   headers?: Record<string, string>;
   body: string;
-  /** When set and no x-hub-retry-after-ms header is already present, server.ts injects it so
-   *  rateLimitResetMs can compute the reset time without the thrower knowing the header name. */
+  /** When set and no x-hub-retry-after-ms header is already present, the front door injects it so
+   *  the router can compute the reset time without the thrower knowing the header name. */
   retryAfterMs?: number;
 
   constructor(init: { status: number; headers?: Record<string, string>; body: string; retryAfterMs?: number }) {

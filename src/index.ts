@@ -20,7 +20,6 @@ export type {
 } from "./types.js";
 export { isValidProfile, HandleIrError, isHandleIrError } from "./types.js";
 
-export { isRateLimited, rateLimitResetMs, rateLimitFinal } from "./rate-limit.js";
 
 export { claudeTiers, readModelMap, catalogEntries, normalizeChain, resolveModelMap, modelEnvPairs } from "./model-map.js";
 
