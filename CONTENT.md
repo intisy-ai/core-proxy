@@ -1,11 +1,8 @@
-# core-proxy
-
 The shared routing + HTTP-proxy engine for the intisy AI-tooling ecosystem. It
 holds the `:34567` daemon logic (tier→provider routing chains, rate-limit
 fallback, model rewrite, the native-429 synthesis, and the node↔web request
 adapter) as a single source of truth, so both the loaders and the dashboard
 sidecar drive identical behavior.
-
 This is a **library repo consumed as a published npm package** (the same treatment
 as `core` / `core-auth` / `core-loader`): a plugin resolves
 `@intisy-ai/core-proxy` as a dependency rather than inlining a copy.
@@ -64,7 +61,3 @@ await server.listen();
 `npm run build && npx vitest run` runs unit tests for each module plus an
 integration test that binds an ephemeral port and exercises `/health`,
 chain fallback past a rate-limited provider, and native-429 exhaustion.
-
-## License
-
-MIT

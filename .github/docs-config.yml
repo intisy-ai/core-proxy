@@ -1,0 +1,5 @@
+kind: generic
+description: Generic routing and rate-limit proxy engine for the intisy-ai AI-proxy ecosystem.
+badges:
+  - npm-version
+  - npm-downloads
