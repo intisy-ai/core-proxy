@@ -221,6 +221,14 @@ export async function routeDeps(opts: RouteDepsOptions): Promise<CoreProxyJsRout
   // A profile with no translator is a supported shape: the engine then has no IR front door and
   // routes through a handler's own app-wire path.
   const translator = opts.profile.translator;
+  if (translator && typeof translator.handles !== "function") {
+    // The type demands `handles`, but this value crosses a published-package boundary where versions
+    // can skew: a home holding an older translator would otherwise fail with a bare TypeError deep
+    // in the request path. core-ir 1.3.0 is where `makeVendorTranslator` began supplying it.
+    throw new Error(
+      "this profile's translator exposes no handles(); it predates core-ir 1.3.0 and cannot drive the router",
+    );
+  }
   const handles = translator ? await translator.handles() : undefined;
 
   return {
