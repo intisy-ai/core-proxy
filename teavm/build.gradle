@@ -12,8 +12,8 @@ dependencies {
     // :seam and :js-base carry the implementations of the host-injected seams (SimpleJsonCodec,
     // InMemoryStore, JsHttpClientBridge, JsStoreBridge) that CoreProxyJs assembles. Embedding a copy
     // is the point of a TeaVM bundle; sharing the SOURCE is what stops it being duplicated.
-    githubImplementation "intisy-ai:api:1.0.1:seam"
-    githubImplementation "intisy-ai:api:1.0.1:js-base"
+    githubImplementation "intisy-ai:api:1.1.0:seam"
+    githubImplementation "intisy-ai:api:1.1.0:js-base"
     teavm teavm.libs.jsoApis
 }
 

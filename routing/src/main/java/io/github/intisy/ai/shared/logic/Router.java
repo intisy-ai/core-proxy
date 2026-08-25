@@ -7,9 +7,14 @@ import io.github.intisy.ai.shared.routing.CatalogEntry;
 import io.github.intisy.ai.ir.spi.HandleIrException;
 import io.github.intisy.ai.ir.spi.HandlerCtx;
 import io.github.intisy.ai.ir.spi.IrHandler;
+import io.github.intisy.ai.ir.spi.IrStreamHandler;
+import io.github.intisy.ai.ir.spi.StreamEncoder;
+import io.github.intisy.ai.ir.stream.IrEventSource;
+import io.github.intisy.ai.ir.stream.IrStreamEvent;
 import io.github.intisy.ai.shared.routing.ProxyHandler;
 import io.github.intisy.ai.api.seam.JsonCodec;
 import io.github.intisy.ai.api.seam.HttpRequest;
+import io.github.intisy.ai.api.seam.EventSource;
 import io.github.intisy.ai.api.seam.HttpResponse;
 
 import java.util.ArrayList;
@@ -82,8 +87,12 @@ public final class Router {
             // through to the app-wire call that only a ProxyHandler offers.
             if (ir != null) {
                 try {
-                    IrResponse irResp = handler.handleIr(ir, ctx);
-                    resp = wireResponse(opts.profile.translator.encodeResponse(irResp));
+                    if (ir.stream && handler instanceof IrStreamHandler) {
+                        resp = streamResponse(((IrStreamHandler) handler).handleIrStream(ir, ctx), opts);
+                    } else {
+                        IrResponse irResp = handler.handleIr(ir, ctx);
+                        resp = wireResponse(opts.profile.translator.encodeResponse(irResp));
+                    }
                     handled = true;
                 } catch (UnsupportedOperationException notIrCapable) {
                     // fall through to the handle() call below
@@ -275,6 +284,65 @@ public final class Router {
         resp.headers = headers;
         resp.body = wireJson;
         return resp;
+    }
+
+    /**
+     * Wraps a handler's IR event stream as a streamed {@link HttpResponse}, encoding each event to
+     * this profile's wire format through one stateful {@code StreamEncoder}.
+     *
+     * @implNote Pulls the FIRST event here rather than lazily, which is what makes the fallback
+     * chain honest: status and headers are committed to the wire the moment a streamed response
+     * starts, so an upstream failure is only retryable while nothing has been sent. Pulling the
+     * first event eagerly moves a {@code HandleIrException} that would otherwise surface
+     * mid-stream, where {@code route} could no longer act on it, to a point where the chain can
+     * still advance. The event is then replayed as the stream's first element so nothing is lost.
+     */
+    private static HttpResponse streamResponse(IrEventSource events, RouterOptions opts) {
+        StreamEncoder encoder;
+        try {
+            encoder = opts.profile.translator.newStreamEncoder();
+        } catch (UnsupportedOperationException cannotStream) {
+            // Surfaced, never downgraded: route()'s own UnsupportedOperationException arm means "this
+            // handler has no IR path" and would fall through to the app-wire call, answering a
+            // stream request with a buffered body the client will not read as SSE.
+            throw new IllegalStateException("this profile's translator cannot encode a stream", cannotStream);
+        }
+        IrStreamEvent first = events.next();
+
+        HttpResponse resp = new HttpResponse();
+        resp.status = 200;
+        Map<String, String> headers = new LinkedHashMap<>();
+        headers.put("content-type", "text/event-stream");
+        resp.headers = headers;
+        resp.bodyStream = new EncodedEventSource(events, encoder, first);
+        return resp;
+    }
+
+    /** Encodes each pulled IR event to wire text, replaying the eagerly-pulled first event once. */
+    private static final class EncodedEventSource implements EventSource {
+        private final IrEventSource events;
+        private final StreamEncoder encoder;
+        private IrStreamEvent pending;
+        private boolean pendingConsumed;
+
+        EncodedEventSource(IrEventSource events, StreamEncoder encoder, IrStreamEvent first) {
+            this.events = events;
+            this.encoder = encoder;
+            this.pending = first;
+        }
+
+        @Override
+        public String next() {
+            IrStreamEvent event;
+            if (!pendingConsumed) {
+                pendingConsumed = true;
+                event = pending;
+                pending = null;
+            } else {
+                event = events.next();
+            }
+            return event == null ? null : encoder.encode(event);
+        }
     }
 
     // -- /v1/models catalog ---------------------------------------------------
