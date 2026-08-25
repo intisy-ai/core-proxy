@@ -444,10 +444,22 @@ public final class Router {
 
     // -- url helpers (no java.net, hand-rolled for transpilability) ---------------
 
+    /**
+     * The path part of a request target.
+     *
+     * @implNote Accepts an absolute URL as well as the bare path a host normally supplies, because
+     * getting that wrong fails silently in the worst way: every unmatched target falls through to
+     * routing, so an absolute URL still serves {@code /v1/messages} correctly while {@code /health}
+     * and {@code /v1/models} quietly become routed requests and answer 503.
+     */
     private static String pathOf(String url) {
         if (url == null) return "/";
         int q = url.indexOf('?');
-        return q >= 0 ? url.substring(0, q) : url;
+        String withoutQuery = q >= 0 ? url.substring(0, q) : url;
+        int scheme = withoutQuery.indexOf("://");
+        if (scheme < 0) return withoutQuery;
+        int firstSlash = withoutQuery.indexOf('/', scheme + 3);
+        return firstSlash < 0 ? "/" : withoutQuery.substring(firstSlash);
     }
 
     // Percent-decodes a URL path component exactly once, without java.net.URLDecoder (not

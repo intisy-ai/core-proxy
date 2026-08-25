@@ -242,6 +242,30 @@ public final class CoreProxyJs {
         }).start());
     }
 
+    /**
+     * Routes one REAL request. Unlike {@link #routeJsonAsync}, nothing is synthesised here: the
+     * profile's data comes from {@code profileJson} and every seam the engine needs (store,
+     * translator, handler resolution, notifications, the native rate-limit shape, and the sink a
+     * streamed body is written to) is supplied by the host through {@code deps}.
+     *
+     * <p>Resolves the response as {@code {status, headers, body, streamed}}. When {@code streamed} is
+     * true the body has already been pushed to {@code deps.emit} frame by frame and {@code deps.close}
+     * has been called, so {@code body} is absent; a stream that died after its first frame adds
+     * {@code streamError}, because by then the status line cannot be taken back.
+     */
+    @JSExport
+    public static JSPromise<JSString> routeRequest(JsRouteDeps deps, String profileJson, String requestJson) {
+        // Built by hand rather than with JSPromise.callAsync for the reason the routeJsonAsync javadoc
+        // gives: callAsync's generic resolve leaks a raw jl_String wrapper instead of a JS string.
+        return new JSPromise<>((resolve, reject) -> new Thread(() -> {
+            try {
+                resolve.accept(JSString.valueOf(ProductionRoute.route(deps, profileJson, requestJson)));
+            } catch (Throwable e) {
+                reject.accept(JSString.valueOf("routeRequest failed: " + e));
+            }
+        }).start());
+    }
+
     // -- shared wiring ------------------------------------------------------------
 
     static Store seedStore(String storeJson) {

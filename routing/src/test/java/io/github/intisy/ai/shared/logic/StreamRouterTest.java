@@ -172,6 +172,32 @@ class StreamRouterTest {
         assertTrue(resp.body.contains("buffered reply"), resp.body);
     }
 
+    // -- the request target ---------------------------------------------------
+
+    @Test
+    void servesTheCatalogForABarePathAndForAnAbsoluteUrl() {
+        InMemoryStore store = seededStore("ok");
+        RouterOptions opts = options(store, profile(new TestTranslator(new SimpleJsonCodec())),
+                resolver(new StreamingProvider("ok", "unused")), providers("ok"));
+
+        HttpRequest bare = post(bufferedBody());
+        bare.method = "GET";
+        bare.url = "/v1/models";
+        assertEquals(200, Router.route(bare, opts).status);
+
+        // An absolute URL must not fall through to routing, which would answer 503 while
+        // /v1/messages kept working, hiding the mistake.
+        HttpRequest absolute = post(bufferedBody());
+        absolute.method = "GET";
+        absolute.url = "http://localhost:34567/v1/models";
+        assertEquals(200, Router.route(absolute, opts).status);
+
+        HttpRequest health = post("");
+        health.method = "GET";
+        health.url = "http://localhost:34567/health";
+        assertEquals(200, Router.route(health, opts).status);
+    }
+
     // -- harness --------------------------------------------------------------
 
     private static HttpResponse route(InMemoryStore store, HandlerResolver resolver, List<String> providers) {
