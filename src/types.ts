@@ -1,8 +1,8 @@
 // Canonical IR types and the per-vendor translator API, imported type-only so they erase at
 // build time: core-proxy's compiled dist never imports core-ir at runtime; only a caller that
 // constructs a translator instance (a profile or a test) pulls in the real module.
-import type { IrRequest, IrResponse, IrStreamEvent, VendorTranslator } from "@intisy-ai/core-ir";
-export type { IrRequest, IrResponse, IrStreamEvent, VendorTranslator } from "@intisy-ai/core-ir";
+import type { IrRequest, IrResponse, IrStreamEvent, VendorTranslator, WithVendorHandles } from "@intisy-ai/core-ir";
+export type { IrRequest, IrResponse, IrStreamEvent, VendorTranslator, WithVendorHandles } from "@intisy-ai/core-ir";
 
 export type HandlerCtx = {
   configDir: string;
@@ -130,7 +130,14 @@ export type RoutingProfile = {
    * by every app that speaks the same wire format). Undefined means the profile has no IR
    * front-door: the server then uses only the handle() path.
    */
-  translator?: VendorTranslator;
+  /**
+   * The app<->IR translator for this profile.
+   *
+   * Carries {@link WithVendorHandles} because the routing engine is Java and reaches a translator
+   * through a synchronous seam, so it needs the vendor module's own string functions rather than the
+   * promise-returning wrappers built over them. Every translator from `makeVendorTranslator` has it.
+   */
+  translator?: VendorTranslator & WithVendorHandles;
 };
 
 export type ProxyOptions = {

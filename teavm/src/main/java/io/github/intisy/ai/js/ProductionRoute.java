@@ -47,7 +47,13 @@ final class ProductionRoute {
 
         Map<?, ?> profileMap = asMap(json.parse(profileJson));
         RoutingProfile profile = profile(profileMap);
-        profile.translator = new JsTranslatorBridge(deps.getTranslator(), irJson);
+        // A profile with no translator is a supported shape, not a misconfiguration: the engine then
+        // has no IR front door and routes through a handler's own app-wire path. Leaving the field
+        // null is what Router reads to mean that, so a bridge over an absent handle is never built.
+        JsTranslatorBridge.JsTranslator jsTranslator = deps.getTranslator();
+        profile.translator = jsTranslator == null || JSObjects.isUndefined(jsTranslator)
+                ? null
+                : new JsTranslatorBridge(jsTranslator, irJson);
         profile.nativeRateLimit = nativeRateLimit(deps, json);
 
         RouterOptions opts = new RouterOptions();
@@ -56,8 +62,19 @@ final class ProductionRoute {
         opts.json = json;
         opts.clock = System::currentTimeMillis;
         opts.log = NoopLogger.INSTANCE;
-        opts.notify = (message, level) -> deps.getNotify().notify(JSString.valueOf(message),
-                level == null ? null : JSString.valueOf(level));
+        opts.notify = new io.github.intisy.ai.shared.logic.Notifier() {
+            @Override
+            public void notify(String message, String level) {
+                deps.getNotify().notify(JSString.valueOf(message), level == null ? null : JSString.valueOf(level));
+            }
+
+            @Override
+            public void event(String action, String impact, String detailsJson) {
+                JsRouteDeps.JsEvent record = deps.getEvent();
+                if (record == null || JSObjects.isUndefined(record)) return;
+                record.record(JSString.valueOf(action), JSString.valueOf(impact), JSString.valueOf(detailsJson));
+            }
+        };
         opts.listProviders = () -> providers(deps.getProviders());
         opts.configDir = str(profileMap.get("configDir"), "");
         opts.resolveHandler = provider -> resolve(deps, provider, json, irJson);
@@ -125,8 +142,7 @@ final class ProductionRoute {
             args.put("upstreamHeaders", upstream != null && upstream.headers != null
                     ? upstream.headers : new LinkedHashMap<String, String>());
             args.put("upstreamBody", upstream != null && upstream.body != null ? upstream.body : "");
-            JSString built = deps.getNativeRateLimit().synthesize(JSString.valueOf(json.stringify(args)));
-            return synth(json, built == null || JSObjects.isUndefined(built) ? null : built.stringValue());
+            return synth(json, awaitSynth(deps.getNativeRateLimit(), JSString.valueOf(json.stringify(args))));
         };
     }
 
@@ -222,6 +238,22 @@ final class ProductionRoute {
     }
 
     // -- @Async bridge ------------------------------------------------------------
+
+    @Async
+    private static native String awaitSynth(JsRouteDeps.JsNativeRateLimit fn, JSString infoJson);
+
+    private static void awaitSynth(JsRouteDeps.JsNativeRateLimit fn, JSString infoJson,
+                                   AsyncCallback<String> callback) {
+        fn.synthesize(infoJson).then(
+                value -> {
+                    callback.complete(value == null || JSObjects.isUndefined(value) ? null : value.stringValue());
+                    return null;
+                },
+                error -> {
+                    callback.error(new RuntimeException("building the native rate limit rejected: " + error));
+                    return null;
+                });
+    }
 
     @Async
     private static native JsIrHandlerBridge.JsIrHandler awaitResolve(JsRouteDeps.JsResolveHandler fn, JSString provider);

@@ -53,15 +53,18 @@ export interface CoreProxyJsHandler {
 /** Every seam a production route needs from the host. */
 export interface CoreProxyJsRouteDeps {
   store: CoreProxyJsStore;
-  translator: CoreProxyJsTranslator;
+  /** Absent on a wire-only profile, which routes through a handler's own `handle` instead. */
+  translator?: CoreProxyJsTranslator;
   resolveHandler(provider: string): Promise<CoreProxyJsHandler | null>;
   notify(message: string, level: string | null): void;
+  /** Records a routing event structurally, alongside the message `notify` shows. */
+  event(action: string, impact: string, detailsJson: string): void;
   /**
    * Builds this app's native rate-limit response from
    * `{resetMs, now, upstreamStatus, upstreamHeaders, upstreamBody}`, returning
    * `{status, headers, body}`. Synchronous, and it can be: the upstream body has already been read.
    */
-  nativeRateLimit(infoJson: string): string;
+  nativeRateLimit(infoJson: string): Promise<string>;
   /** Receives each already-encoded wire frame of a streamed body, in order. */
   emit(frame: string): void;
   /** Called once a streamed body ends, with the failure that ended it or null. */

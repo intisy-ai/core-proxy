@@ -77,8 +77,9 @@ function deps(overrides: Partial<Deps> & { emitted: string[]; closed: (string | 
     translator: translatorDouble(),
     resolveHandler: async () => null,
     notify: () => {},
-    nativeRateLimit: (infoJson: string) =>
+    nativeRateLimit: async (infoJson: string) =>
       JSON.stringify({ status: 429, headers: { "x-hub-retry-after-ms": String(JSON.parse(infoJson).resetMs) }, body: "limited" }),
+    event: () => {},
     emit: (frame: string) => { emitted.push(frame); },
     close: (error: string | null) => { closed.push(error ?? null); },
     providers: ["primary"],
@@ -287,7 +288,7 @@ describe("routeRequest", () => {
     const result = JSON.parse(await core.routeRequest(deps({
       emitted,
       closed,
-      nativeRateLimit: (infoJson: string) => {
+      nativeRateLimit: async (infoJson: string) => {
         seenInfo.push(JSON.parse(infoJson));
         return JSON.stringify({ status: 429, headers: { "content-type": "application/json" }, body: "synthesized" });
       },

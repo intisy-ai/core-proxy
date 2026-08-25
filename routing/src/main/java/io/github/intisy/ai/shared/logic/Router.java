@@ -59,6 +59,7 @@ public final class Router {
         if (primary.derived) {
             notify(opts, "Model mapping healed: serving " + primary.provider + " · " + displayName(primary)
                     + " (the stored model for this tier is no longer in the catalog).", "info");
+            event(opts, "route_healed", "notice", "{\"provider\":\"" + primary.provider + "\"}");
         }
 
         // Try the tier's models in order; advance to the next only when one is rate-limited, so a
@@ -140,6 +141,8 @@ public final class Router {
             // Never switch the user silently: announce when a fallback (not the primary) served.
             if (i > 0) {
                 notify(opts, displayName(primary) + " rate-limited → served by " + displayName(assigned), null);
+                event(opts, "rate_limit_fallback", "warning",
+                        "{\"servedBy\":\"" + displayName(assigned) + "\"}");
             }
             return resp; // success or a non-rate-limit error, surface it
         }
@@ -148,6 +151,7 @@ public final class Router {
         // client renders its own rate-limit UI, consistent across providers.
         if ((lastResp != null && lastResp.status == 429) || resetMs > opts.clock.now()) {
             notify(opts, "All mapped models for this tier are rate-limited, request rejected with the earliest reset time.", null);
+            event(opts, "rate_limited", "warning", "{\"resetMs\":" + resetMs + "}");
             return RateLimit.rateLimitFinal(lastResp, resetMs, opts.profile);
         }
         return lastResp != null ? lastResp : errorResponse(503, "No provider handler available for this tier.", opts.json);
@@ -161,6 +165,15 @@ public final class Router {
      * @implNote Warn rather than info: every call site is a failure the router recovered from by
      * falling back, which is exactly what the level means.
      */
+    private static void event(RouterOptions opts, String action, String impact, String detailsJson) {
+        if (opts.notify == null) return;
+        try {
+            opts.notify.event(action, impact, detailsJson);
+        } catch (RuntimeException ignored) {
+            // Recording an event must never fail the request it describes.
+        }
+    }
+
     private static void warn(RouterOptions opts, String message) {
         if (opts.log != null) opts.log.warn(message);
     }
@@ -225,6 +238,7 @@ public final class Router {
                     && opts.profile.nativeModelPattern.matcher(requested).find();
             if (!matchesNative) {
                 notify(opts, "Requested model '" + requested + "' is not in any provider catalog, serving the Default tier instead.", null);
+                event(opts, "model_switched", "notice", "{\"requested\":\"" + requested + "\",\"servedTier\":\"Default\"}");
             }
         }
 

@@ -30,10 +30,21 @@ public interface JsRouteDeps extends JSObject {
         void notify(JSString message, JSString level);
     }
 
-    /** Builds this app's native rate-limit response from {@code {resetMs, upstreamStatus}} JSON. */
+    /** Records a routing event: what happened, how much it matters, and its JSON details. */
+    @JSFunctor
+    interface JsEvent extends JSObject {
+        void record(JSString action, JSString impact, JSString detailsJson);
+    }
+
+    /**
+     * Builds this app's native rate-limit response from the observed rate-limit info.
+     *
+     * @implNote Asynchronous, so a host can hand over the profile's existing promise-returning
+     * builder unchanged rather than being made to supply a second synchronous one.
+     */
     @JSFunctor
     interface JsNativeRateLimit extends JSObject {
-        JSString synthesize(JSString infoJson);
+        JSPromise<JSString> synthesize(JSString infoJson);
     }
 
     @JSProperty
@@ -47,6 +58,10 @@ public interface JsRouteDeps extends JSObject {
 
     @JSProperty
     JsNotify getNotify();
+
+    /** Records a routing event structurally; the host chooses what to file it under. */
+    @JSProperty
+    JsEvent getEvent();
 
     @JSProperty
     JsNativeRateLimit getNativeRateLimit();
