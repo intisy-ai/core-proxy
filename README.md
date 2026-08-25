@@ -20,8 +20,8 @@ flowchart LR
   S -->|/v1/messages| R[resolveModelMap → tier chain]
   R --> W{walk chain}
   W -->|resolveHandler provider| P[provider handle]
-  P -->|isRateLimited| W
-  W -->|chain exhausted| N[rateLimitFinal → profile.nativeRateLimit]
+  P -->|rate limited| W
+  W -->|chain exhausted| N[final 429 via profile.nativeRateLimit]
 ```
 
 Routing is parameterized by a `RoutingProfile`: everything app-specific
@@ -37,7 +37,6 @@ app adds its own `<app>-proxy` on top of this engine rather than forking it.
 - `src/types.ts`: the ABI (`HandlerCtx`, `ProxyHandler`, `HandlerResolver`,
   `Assignment`, `Chain`, `ModelMap`, `CatalogEntry`, `RateLimitInfo`,
   `RoutingProfile`, `ProxyOptions`, `ProxyServer`) + `isValidProfile`.
-- `src/rate-limit.ts`: `isRateLimited`, `rateLimitResetMs`, `rateLimitFinal`.
 - `src/model-map.ts`: `resolveModelMap`, `claudeTiers`, `readModelMap`,
   `catalogEntries`, `normalizeChain`, `modelEnvPairs`.
 - `src/handler-resolver.ts`: `makeDynamicResolver` (mtime-cache-busting

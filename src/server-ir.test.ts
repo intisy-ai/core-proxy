@@ -121,9 +121,9 @@ it("legacy handle()-only handler still serves via the fallback, even though the 
   expect(await r.text()).toBe("served m-legacy");
 });
 
-// A thrown HandleIrError must reconstruct a real Response and flow through the same isRateLimited/
-// rateLimitResetMs/fallback/final-429-synthesis logic as a wire handle() response, instead of
-// collapsing to a flat 502 (which loses status fidelity and breaks rate-limit fallback).
+// A thrown HandleIrError must reconstruct a real Response and flow through the router's own
+// rate-limit detection, fallback and final-429 synthesis, exactly as a wire handle() response does,
+// instead of collapsing to a flat 502 (which loses status fidelity and breaks rate-limit fallback).
 it("handleIr throwing a 429-typed HandleIrError triggers fallback, then synthesizes a final 429 once every entry is exhausted", async () => {
   writeFileSync(
     join(dir, "config", "claude-code-loader.json"),
