@@ -297,7 +297,7 @@ public final class Router {
      * mid-stream, where {@code route} could no longer act on it, to a point where the chain can
      * still advance. The event is then replayed as the stream's first element so nothing is lost.
      */
-    private static HttpResponse streamResponse(IrEventSource events, RouterOptions opts) {
+    private static HttpResponse streamResponse(IrEventSource events, RouterOptions opts) throws Exception {
         StreamEncoder encoder;
         try {
             encoder = opts.profile.translator.newStreamEncoder();
@@ -339,7 +339,16 @@ public final class Router {
                 event = pending;
                 pending = null;
             } else {
-                event = events.next();
+                try {
+                    event = events.next();
+                } catch (RuntimeException e) {
+                    throw e;
+                } catch (Exception e) {
+                    // Past the first event the response is committed, so a modeled transport outcome
+                    // has nothing left to decide: it can only end the stream. The layer-1 seam this
+                    // implements declares no checked failure for exactly that reason.
+                    throw new RuntimeException(e);
+                }
             }
             return event == null ? null : encoder.encode(event);
         }

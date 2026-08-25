@@ -126,6 +126,23 @@ class StreamRouterTest {
         assertEquals(502, resp.status);
     }
 
+    @Test
+    void aTypedFailureOnTheFIRSTPullAlsoAdvancesTheChain() {
+        // The shape the JS bridge actually produces: handleIrStream returns a source, and the 429
+        // only surfaces when that source is first pulled. Router's eager first pull is what turns
+        // this into a retryable outcome instead of a mid-stream death.
+        InMemoryStore store = seededStore("limited", "ok");
+        StreamingProvider healthy = new StreamingProvider("ok", "served");
+        HandlerResolver resolver = name -> "limited".equals(name)
+                ? new FailsOnFirstPullProvider("limited")
+                : healthy;
+
+        HttpResponse resp = route(store, resolver, providers("limited", "ok"));
+
+        assertEquals(200, resp.status);
+        assertEquals("frame0:text_delta:served", resp.bodyStream.next());
+    }
+
     // -- the non-streamed path is untouched -----------------------------------
 
     @Test
@@ -330,6 +347,34 @@ class StreamRouterTest {
             Map<String, String> headers = new LinkedHashMap<>();
             headers.put("retry-after", "1");
             throw new HandleIrException(429, headers, "{\"error\":\"rate limited\"}", 1000L);
+        }
+    }
+
+    /** Returns a source that throws a typed 429 on its very first pull, nothing yet on the wire. */
+    private static final class FailsOnFirstPullProvider implements IrStreamHandler {
+        private final String id;
+
+        FailsOnFirstPullProvider(String id) {
+            this.id = id;
+        }
+
+        @Override
+        public String id() {
+            return id;
+        }
+
+        @Override
+        public IrResponse handleIr(IrRequest request, HandlerCtx ctx) {
+            throw new UnsupportedOperationException("stream only");
+        }
+
+        @Override
+        public IrEventSource handleIrStream(IrRequest request, HandlerCtx ctx) {
+            return () -> {
+                Map<String, String> headers = new LinkedHashMap<>();
+                headers.put("retry-after", "1");
+                throw new HandleIrException(429, headers, "{\"error\":\"rate limited\"}", 1000L);
+            };
         }
     }
 

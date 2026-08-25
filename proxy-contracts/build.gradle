@@ -6,7 +6,7 @@
 dependencies {
     githubCompileOnly "intisy-ai:api:1.1.0:annotations"
     githubCompileOnly "intisy-ai:api:1.1.0:contract"
-    githubCompileOnly "intisy-ai:core-ir:1.1.0:ir"
+    githubCompileOnly "intisy-ai:core-ir:1.2.0:ir"
     githubAnnotationProcessor "intisy-ai:api:1.1.0:processor"
     githubAnnotationProcessor "intisy-ai:api:1.1.0:annotations"
 }

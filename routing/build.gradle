@@ -9,7 +9,7 @@ dependencies {
     // core-ir's IR types, handler seam and Translator SPI: Router resolves an IrHandler and carries
     // IR alongside the HttpRequest/HttpResponse path. `api` rather than compileOnly because
     // HandlerResolver's own signature names IrHandler, so a consumer needs it resolvable too.
-    githubApi "intisy-ai:core-ir:1.1.0:ir"
+    githubApi "intisy-ai:core-ir:1.2.0:ir"
 
     // A release-asset jar exports nothing, so what :ir used to hand over transitively is named
     // here: the seam interfaces Router's own signatures carry.
