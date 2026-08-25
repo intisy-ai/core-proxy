@@ -60,7 +60,7 @@ final class ProductionRoute {
                 level == null ? null : JSString.valueOf(level));
         opts.listProviders = () -> providers(deps.getProviders());
         opts.configDir = str(profileMap.get("configDir"), "");
-        opts.resolveHandler = provider -> resolve(deps, provider, irJson);
+        opts.resolveHandler = provider -> resolve(deps, provider, json, irJson);
 
         HttpResponse resp = Router.route(request(json, requestJson), opts);
         return respond(json, resp, deps);
@@ -102,39 +102,29 @@ final class ProductionRoute {
         }
     }
 
-    private static IrHandler resolve(JsRouteDeps deps, String provider, io.github.intisy.ai.ir.spi.JsonCodec irJson) {
+    private static IrHandler resolve(JsRouteDeps deps, String provider, JsonCodec json,
+                                     io.github.intisy.ai.ir.spi.JsonCodec irJson) {
         JsIrHandlerBridge.JsIrHandler jsHandler = awaitResolve(deps.getResolveHandler(), JSString.valueOf(provider));
         if (jsHandler == null || JSObjects.isUndefined(jsHandler)) return null;
-        JsIrHandlerBridge bridge = new JsIrHandlerBridge(provider, jsHandler, irJson);
-        // Router selects the streamed path by `instanceof IrStreamHandler`, so a handler with no
-        // streamed entry point must not present as one: it would be chosen and then refuse.
-        return bridge.canStream() ? bridge : new BufferedOnly(bridge);
+        return JsHandlers.wrap(provider, jsHandler, json, irJson);
     }
 
-    /** Presents a JS handler that cannot stream as buffered-only, hiding the streamed interface. */
-    private static final class BufferedOnly implements IrHandler {
-        private final JsIrHandlerBridge delegate;
-
-        BufferedOnly(JsIrHandlerBridge delegate) {
-            this.delegate = delegate;
-        }
-
-        @Override
-        public String id() {
-            return delegate.id();
-        }
-
-        @Override
-        public IrResponse handleIr(IrRequest request, HandlerCtx ctx) throws Exception {
-            return delegate.handleIr(request, ctx);
-        }
-    }
-
+    /**
+     * @implNote Carries the upstream's headers and BODY, not just its status, because an app whose
+     * native rate-limit response is the upstream's own passed through verbatim needs them. On the
+     * TypeScript side reading that body is asynchronous, which is why this seam could not be
+     * synchronous there; here the body has already been read.
+     */
     private static RoutingProfile.NativeRateLimit nativeRateLimit(JsRouteDeps deps, JsonCodec json) {
         return info -> {
             Map<String, Object> args = new LinkedHashMap<>();
             args.put("resetMs", info != null ? info.resetMs : 0L);
-            args.put("upstreamStatus", info != null && info.upstream != null ? info.upstream.status : 0);
+            args.put("now", System.currentTimeMillis());
+            HttpResponse upstream = info != null ? info.upstream : null;
+            args.put("upstreamStatus", upstream != null ? upstream.status : 0);
+            args.put("upstreamHeaders", upstream != null && upstream.headers != null
+                    ? upstream.headers : new LinkedHashMap<String, String>());
+            args.put("upstreamBody", upstream != null && upstream.body != null ? upstream.body : "");
             JSString built = deps.getNativeRateLimit().synthesize(JSString.valueOf(json.stringify(args)));
             return synth(json, built == null || JSObjects.isUndefined(built) ? null : built.stringValue());
         };

@@ -38,10 +38,16 @@ export interface CoreProxyJsTranslator {
   newStreamEncoder(): { encode(irEventJson: string): string };
 }
 
-/** A JS-provided provider handler. `handleIrStream` is absent on a buffered-only handler. */
+/**
+ * A JS-provided provider handler. Every member is optional and the engine reads which are present:
+ * `handleIrStream` is absent on a buffered-only handler, `handleIr` on a wire-only one, and `handle`
+ * on an IR-native one. A handler offering both IR and wire always takes the IR path.
+ */
 export interface CoreProxyJsHandler {
-  handleIr(irRequestJson: string, ctxJson: string): Promise<string>;
+  handleIr?(irRequestJson: string, ctxJson: string): Promise<string>;
   handleIrStream?(irRequestJson: string, ctxJson: string): { next(): Promise<string | null> };
+  /** The app-wire path: a `{method,url,headers,body}` request in, a `{status,headers,body}` out. */
+  handle?(requestJson: string, ctxJson: string): Promise<string>;
 }
 
 /** Every seam a production route needs from the host. */
@@ -50,6 +56,11 @@ export interface CoreProxyJsRouteDeps {
   translator: CoreProxyJsTranslator;
   resolveHandler(provider: string): Promise<CoreProxyJsHandler | null>;
   notify(message: string, level: string | null): void;
+  /**
+   * Builds this app's native rate-limit response from
+   * `{resetMs, now, upstreamStatus, upstreamHeaders, upstreamBody}`, returning
+   * `{status, headers, body}`. Synchronous, and it can be: the upstream body has already been read.
+   */
   nativeRateLimit(infoJson: string): string;
   /** Receives each already-encoded wire frame of a streamed body, in order. */
   emit(frame: string): void;

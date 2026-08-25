@@ -238,6 +238,80 @@ describe("routeRequest", () => {
     expect(closed[0]).toContain("upstream died mid-stream");
   });
 
+  it("serves a wire-only handler, which has no IR path at all", async () => {
+    await initCoreProxy();
+    const core = getCoreProxy();
+    const emitted: string[] = [];
+    const closed: (string | null)[] = [];
+
+    const result = JSON.parse(await core.routeRequest(deps({
+      emitted,
+      closed,
+      resolveHandler: async () => ({
+        handle: async (requestJson: string, ctxJson: string) =>
+          JSON.stringify({ status: 200, headers: {}, body: "wire served " + JSON.parse(ctxJson).model }),
+      }) as never,
+    }), PROFILE, request(false)));
+
+    expect(result.status).toBe(200);
+    expect(result.body).toBe("wire served claude-opus-4");
+  });
+
+  it("prefers the IR path when a handler serves both", async () => {
+    await initCoreProxy();
+    const core = getCoreProxy();
+    const emitted: string[] = [];
+    const closed: (string | null)[] = [];
+
+    const result = JSON.parse(await core.routeRequest(deps({
+      emitted,
+      closed,
+      resolveHandler: async () => ({
+        handleIr: async (irRequestJson: string) =>
+          JSON.stringify({ id: "msg_1", model: JSON.parse(irRequestJson).model, content: [], stopReason: "end_turn" }),
+        handle: async () => { throw new Error("the wire path must not be taken when IR is available"); },
+      }) as never,
+    }), PROFILE, request(false)));
+
+    expect(result.status).toBe(200);
+    expect(JSON.parse(result.body).wire).toBe("encoded");
+  });
+
+  it("passes the upstream's headers and body to the native rate-limit builder", async () => {
+    await initCoreProxy();
+    const core = getCoreProxy();
+    const emitted: string[] = [];
+    const closed: (string | null)[] = [];
+    const seenInfo: Record<string, unknown>[] = [];
+
+    const result = JSON.parse(await core.routeRequest(deps({
+      emitted,
+      closed,
+      nativeRateLimit: (infoJson: string) => {
+        seenInfo.push(JSON.parse(infoJson));
+        return JSON.stringify({ status: 429, headers: { "content-type": "application/json" }, body: "synthesized" });
+      },
+      resolveHandler: async () => ({
+        handleIr: async () => {
+          const error: Record<string, unknown> = new Error("rate limited");
+          error.name = "HandleIrError";
+          error.status = 429;
+          error.headers = { "retry-after": "3", "x-upstream": "yes" };
+          error.body = "upstream said no";
+          error.retryAfterMs = 3000;
+          throw error;
+        },
+      }) as never,
+    }), PROFILE, request(false)));
+
+    expect(result.status).toBe(429);
+    expect(result.body).toBe("synthesized");
+    // Enough for a profile whose native shape is the upstream's own response passed through.
+    expect(seenInfo[0]).toMatchObject({ upstreamStatus: 429, upstreamBody: "upstream said no" });
+    expect((seenInfo[0].upstreamHeaders as Record<string, string>)["x-upstream"]).toBe("yes");
+    expect(typeof seenInfo[0].now).toBe("number");
+  });
+
   it("reports a provider with no handler installed", async () => {
     await initCoreProxy();
     const core = getCoreProxy();
