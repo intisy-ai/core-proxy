@@ -6,10 +6,9 @@ fallback, model rewrite, the native-429 synthesis, and the node↔web request
 adapter) as a single source of truth, so both the loaders and the dashboard
 sidecar drive identical behavior.
 
-This is a **library repo compiled from a git submodule** (the same treatment as
-`core` / `core-auth` / `core-loader`). It is also published as
-`@intisy-ai/core-proxy`, which is how a plugin installed from npm resolves it
-rather than inlining a copy.
+This is a **library repo consumed as a published npm package** (the same treatment
+as `core` / `core-auth` / `core-loader`): a plugin resolves
+`@intisy-ai/core-proxy` as a dependency rather than inlining a copy.
 
 ## Under-the-Hood Architecture
 
