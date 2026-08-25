@@ -1,4 +1,4 @@
-import type { IrRequest, IrResponse, IrStreamEvent, VendorTranslator } from "@intisy-ai/core-ir";
+import type { IrRequest, IrResponse, IrStreamEvent, VendorHandles, VendorTranslator } from "@intisy-ai/core-ir";
 
 /**
  * A deterministic {@link VendorTranslator} for exercising core-proxy's own codec/routing logic
@@ -35,6 +35,16 @@ export function makeFakeTranslator(): VendorTranslator {
           controller.enqueue(JSON.stringify(event) + "\n");
         },
       });
+    },
+    async handles(): Promise<VendorHandles> {
+      return {
+        decodeRequest: (wireJson) => wireJson,
+        encodeRequest: (irRequestJson) => irRequestJson,
+        decodeResponse: (wireJson) => wireJson,
+        encodeResponse: (irResponseJson) => irResponseJson,
+        newStreamDecoder: () => ({ decode: (chunk) => JSON.stringify([JSON.parse(chunk)]) }),
+        newStreamEncoder: () => ({ encode: (irEventJson) => irEventJson + "\n" }),
+      };
     },
   };
 }

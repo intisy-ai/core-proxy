@@ -8,6 +8,8 @@ import io.github.intisy.ai.ir.TextBlock;
 import io.github.intisy.ai.ir.spi.StreamDecoder;
 import io.github.intisy.ai.ir.spi.StreamEncoder;
 import io.github.intisy.ai.ir.spi.Translator;
+import io.github.intisy.ai.ir.stream.IrStreamEvent;
+import io.github.intisy.ai.ir.stream.TextDeltaEvent;
 import io.github.intisy.ai.api.seam.JsonCodec;
 
 import java.util.ArrayList;
@@ -108,9 +110,21 @@ final class TestTranslator implements Translator {
         throw new UnsupportedOperationException("streaming is covered by the vendor translators' own tests");
     }
 
+    /**
+     * A stateful encoder in the shape a real vendor's is: one SSE-ish frame per event, numbered so a
+     * test can tell a fresh encoder from a reused one and can prove the frames arrive in order.
+     */
     @Override
     public StreamEncoder newStreamEncoder() {
-        throw new UnsupportedOperationException("streaming is covered by the vendor translators' own tests");
+        return new StreamEncoder() {
+            private int frame;
+
+            @Override
+            public String encode(IrStreamEvent event) {
+                String text = event instanceof TextDeltaEvent ? ((TextDeltaEvent) event).text : "";
+                return "frame" + (frame++) + ":" + event.event + ":" + text;
+            }
+        };
     }
 
     private static String firstText(List<Block> blocks) {

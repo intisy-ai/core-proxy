@@ -7,9 +7,14 @@ import io.github.intisy.ai.shared.routing.CatalogEntry;
 import io.github.intisy.ai.ir.spi.HandleIrException;
 import io.github.intisy.ai.ir.spi.HandlerCtx;
 import io.github.intisy.ai.ir.spi.IrHandler;
+import io.github.intisy.ai.ir.spi.IrStreamHandler;
+import io.github.intisy.ai.ir.spi.StreamEncoder;
+import io.github.intisy.ai.ir.stream.IrEventSource;
+import io.github.intisy.ai.ir.stream.IrStreamEvent;
 import io.github.intisy.ai.shared.routing.ProxyHandler;
 import io.github.intisy.ai.api.seam.JsonCodec;
 import io.github.intisy.ai.api.seam.HttpRequest;
+import io.github.intisy.ai.api.seam.EventSource;
 import io.github.intisy.ai.api.seam.HttpResponse;
 
 import java.util.ArrayList;
@@ -54,6 +59,7 @@ public final class Router {
         if (primary.derived) {
             notify(opts, "Model mapping healed: serving " + primary.provider + " · " + displayName(primary)
                     + " (the stored model for this tier is no longer in the catalog).", "info");
+            event(opts, "route_healed", "notice", "{\"provider\":\"" + primary.provider + "\"}");
         }
 
         // Try the tier's models in order; advance to the next only when one is rate-limited, so a
@@ -82,8 +88,12 @@ public final class Router {
             // through to the app-wire call that only a ProxyHandler offers.
             if (ir != null) {
                 try {
-                    IrResponse irResp = handler.handleIr(ir, ctx);
-                    resp = wireResponse(opts.profile.translator.encodeResponse(irResp));
+                    if (ir.stream && handler instanceof IrStreamHandler) {
+                        resp = streamResponse(((IrStreamHandler) handler).handleIrStream(ir, ctx), opts);
+                    } else {
+                        IrResponse irResp = handler.handleIr(ir, ctx);
+                        resp = wireResponse(opts.profile.translator.encodeResponse(irResp));
+                    }
                     handled = true;
                 } catch (UnsupportedOperationException notIrCapable) {
                     // fall through to the handle() call below
@@ -131,6 +141,8 @@ public final class Router {
             // Never switch the user silently: announce when a fallback (not the primary) served.
             if (i > 0) {
                 notify(opts, displayName(primary) + " rate-limited → served by " + displayName(assigned), null);
+                event(opts, "rate_limit_fallback", "warning",
+                        "{\"servedBy\":\"" + displayName(assigned) + "\"}");
             }
             return resp; // success or a non-rate-limit error, surface it
         }
@@ -139,6 +151,7 @@ public final class Router {
         // client renders its own rate-limit UI, consistent across providers.
         if ((lastResp != null && lastResp.status == 429) || resetMs > opts.clock.now()) {
             notify(opts, "All mapped models for this tier are rate-limited, request rejected with the earliest reset time.", null);
+            event(opts, "rate_limited", "warning", "{\"resetMs\":" + resetMs + "}");
             return RateLimit.rateLimitFinal(lastResp, resetMs, opts.profile);
         }
         return lastResp != null ? lastResp : errorResponse(503, "No provider handler available for this tier.", opts.json);
@@ -152,6 +165,15 @@ public final class Router {
      * @implNote Warn rather than info: every call site is a failure the router recovered from by
      * falling back, which is exactly what the level means.
      */
+    private static void event(RouterOptions opts, String action, String impact, String detailsJson) {
+        if (opts.notify == null) return;
+        try {
+            opts.notify.event(action, impact, detailsJson);
+        } catch (RuntimeException ignored) {
+            // Recording an event must never fail the request it describes.
+        }
+    }
+
     private static void warn(RouterOptions opts, String message) {
         if (opts.log != null) opts.log.warn(message);
     }
@@ -216,6 +238,7 @@ public final class Router {
                     && opts.profile.nativeModelPattern.matcher(requested).find();
             if (!matchesNative) {
                 notify(opts, "Requested model '" + requested + "' is not in any provider catalog, serving the Default tier instead.", null);
+                event(opts, "model_switched", "notice", "{\"requested\":\"" + requested + "\",\"servedTier\":\"Default\"}");
             }
         }
 
@@ -275,6 +298,74 @@ public final class Router {
         resp.headers = headers;
         resp.body = wireJson;
         return resp;
+    }
+
+    /**
+     * Wraps a handler's IR event stream as a streamed {@link HttpResponse}, encoding each event to
+     * this profile's wire format through one stateful {@code StreamEncoder}.
+     *
+     * @implNote Pulls the FIRST event here rather than lazily, which is what makes the fallback
+     * chain honest: status and headers are committed to the wire the moment a streamed response
+     * starts, so an upstream failure is only retryable while nothing has been sent. Pulling the
+     * first event eagerly moves a {@code HandleIrException} that would otherwise surface
+     * mid-stream, where {@code route} could no longer act on it, to a point where the chain can
+     * still advance. The event is then replayed as the stream's first element so nothing is lost.
+     */
+    private static HttpResponse streamResponse(IrEventSource events, RouterOptions opts) throws Exception {
+        StreamEncoder encoder;
+        try {
+            encoder = opts.profile.translator.newStreamEncoder();
+        } catch (UnsupportedOperationException cannotStream) {
+            // Surfaced, never downgraded: route()'s own UnsupportedOperationException arm means "this
+            // handler has no IR path" and would fall through to the app-wire call, answering a
+            // stream request with a buffered body the client will not read as SSE.
+            throw new IllegalStateException("this profile's translator cannot encode a stream", cannotStream);
+        }
+        IrStreamEvent first = events.next();
+
+        HttpResponse resp = new HttpResponse();
+        resp.status = 200;
+        Map<String, String> headers = new LinkedHashMap<>();
+        headers.put("content-type", "text/event-stream");
+        resp.headers = headers;
+        resp.bodyStream = new EncodedEventSource(events, encoder, first);
+        return resp;
+    }
+
+    /** Encodes each pulled IR event to wire text, replaying the eagerly-pulled first event once. */
+    private static final class EncodedEventSource implements EventSource {
+        private final IrEventSource events;
+        private final StreamEncoder encoder;
+        private IrStreamEvent pending;
+        private boolean pendingConsumed;
+
+        EncodedEventSource(IrEventSource events, StreamEncoder encoder, IrStreamEvent first) {
+            this.events = events;
+            this.encoder = encoder;
+            this.pending = first;
+        }
+
+        @Override
+        public String next() {
+            IrStreamEvent event;
+            if (!pendingConsumed) {
+                pendingConsumed = true;
+                event = pending;
+                pending = null;
+            } else {
+                try {
+                    event = events.next();
+                } catch (RuntimeException e) {
+                    throw e;
+                } catch (Exception e) {
+                    // Past the first event the response is committed, so a modeled transport outcome
+                    // has nothing left to decide: it can only end the stream. The layer-1 seam this
+                    // implements declares no checked failure for exactly that reason.
+                    throw new RuntimeException(e);
+                }
+            }
+            return event == null ? null : encoder.encode(event);
+        }
     }
 
     // -- /v1/models catalog ---------------------------------------------------
@@ -367,10 +458,22 @@ public final class Router {
 
     // -- url helpers (no java.net, hand-rolled for transpilability) ---------------
 
+    /**
+     * The path part of a request target.
+     *
+     * @implNote Accepts an absolute URL as well as the bare path a host normally supplies, because
+     * getting that wrong fails silently in the worst way: every unmatched target falls through to
+     * routing, so an absolute URL still serves {@code /v1/messages} correctly while {@code /health}
+     * and {@code /v1/models} quietly become routed requests and answer 503.
+     */
     private static String pathOf(String url) {
         if (url == null) return "/";
         int q = url.indexOf('?');
-        return q >= 0 ? url.substring(0, q) : url;
+        String withoutQuery = q >= 0 ? url.substring(0, q) : url;
+        int scheme = withoutQuery.indexOf("://");
+        if (scheme < 0) return withoutQuery;
+        int firstSlash = withoutQuery.indexOf('/', scheme + 3);
+        return firstSlash < 0 ? "/" : withoutQuery.substring(firstSlash);
     }
 
     // Percent-decodes a URL path component exactly once, without java.net.URLDecoder (not
