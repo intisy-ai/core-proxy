@@ -16,3 +16,6 @@ graphify-out/
 src/generated/*.js
 src/generated/*.js.map
 .idea/
+
+# Generated on the default branch by the release readme job.
+README.md
