@@ -28,11 +28,12 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "build": "npm run build:teavm && tsc && node node_modules/@intisy-ai/api/scripts/copy-generated.mjs",
+    "build": "npm run emit && npm run emit:teavm && npm run build:teavm && tsc && node node_modules/@intisy-ai/api/scripts/copy-generated.mjs",
     "build:teavm": "node node_modules/@intisy-ai/api/scripts/teavm-build.mjs --java-dir . --module :teavm --out src/generated/core-proxy.teavm.js",
-    "test": "vitest run",
+    "test": "npm run build && vitest run",
     "prepublishOnly": "npm run build",
-    "emit": "node node_modules/@intisy-ai/api/scripts/emit-dts.mjs --java-dir . --module :proxy-contracts --module-dir proxy-contracts --out src/generated"
+    "emit": "node node_modules/@intisy-ai/api/scripts/emit-dts.mjs --java-dir . --module :proxy-contracts --module-dir proxy-contracts --out src/generated",
+    "emit:teavm": "node node_modules/@intisy-ai/api/scripts/emit-dts.mjs --java-dir . --module :teavm --out src/generated"
   },
   "dependencies": {
     "@intisy-ai/api": "^1.1.0",
