@@ -1,15 +1,18 @@
 # core-proxy
 
+[![npm version](https://img.shields.io/npm/v/core-proxy)](https://www.npmjs.com/package/core-proxy)
+[![npm downloads](https://img.shields.io/npm/dm/core-proxy)](https://www.npmjs.com/package/core-proxy)
+
+Generic routing and rate-limit proxy engine for the intisy-ai AI-proxy ecosystem.
+
 The shared routing + HTTP-proxy engine for the intisy AI-tooling ecosystem. It
 holds the `:34567` daemon logic (tier→provider routing chains, rate-limit
 fallback, model rewrite, the native-429 synthesis, and the node↔web request
 adapter) as a single source of truth, so both the loaders and the dashboard
 sidecar drive identical behavior.
-
-This is a **library repo compiled from a git submodule** (the same treatment as
-`core` / `core-auth` / `core-loader`). It is also published as
-`@intisy-ai/core-proxy`, which is how a plugin installed from npm resolves it
-rather than inlining a copy.
+This is a **library repo consumed as a published npm package** (the same treatment
+as `core` / `core-auth` / `core-loader`): a plugin resolves
+`@intisy-ai/core-proxy` as a dependency rather than inlining a copy.
 
 ## Under-the-Hood Architecture
 
@@ -21,8 +24,8 @@ flowchart LR
   S -->|/v1/messages| R[resolveModelMap → tier chain]
   R --> W{walk chain}
   W -->|resolveHandler provider| P[provider handle]
-  P -->|isRateLimited| W
-  W -->|chain exhausted| N[rateLimitFinal → profile.nativeRateLimit]
+  P -->|rate limited| W
+  W -->|chain exhausted| N[final 429 via profile.nativeRateLimit]
 ```
 
 Routing is parameterized by a `RoutingProfile`: everything app-specific
@@ -38,7 +41,6 @@ app adds its own `<app>-proxy` on top of this engine rather than forking it.
 - `src/types.ts`: the ABI (`HandlerCtx`, `ProxyHandler`, `HandlerResolver`,
   `Assignment`, `Chain`, `ModelMap`, `CatalogEntry`, `RateLimitInfo`,
   `RoutingProfile`, `ProxyOptions`, `ProxyServer`) + `isValidProfile`.
-- `src/rate-limit.ts`: `isRateLimited`, `rateLimitResetMs`, `rateLimitFinal`.
 - `src/model-map.ts`: `resolveModelMap`, `claudeTiers`, `readModelMap`,
   `catalogEntries`, `normalizeChain`, `modelEnvPairs`.
 - `src/handler-resolver.ts`: `makeDynamicResolver` (mtime-cache-busting
@@ -69,4 +71,4 @@ chain fallback past a rate-limited provider, and native-429 exhaustion.
 
 ## License
 
-MIT
+[![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
