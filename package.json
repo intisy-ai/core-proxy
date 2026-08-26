@@ -1,6 +1,6 @@
 {
   "name": "core-proxy",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Generic routing and rate-limit proxy engine for the intisy-ai AI-proxy ecosystem.",
   "type": "module",
   "main": "dist/index.js",
