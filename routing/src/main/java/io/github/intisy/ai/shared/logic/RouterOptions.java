@@ -17,11 +17,17 @@ import java.util.function.Supplier;
  * request to a response.
  */
 public class RouterOptions {
+    /** How this app tiers, maps and rate-limits. */
     public RoutingProfile profile;
+    /** Turns a provider id into the handler that serves it. */
     public HandlerResolver resolveHandler;
+    /** Where the config, the model map and the catalog cache are read from. */
     public Store store;
+    /** The codec every JSON read and write in the route goes through. */
     public JsonCodec json;
+    /** The clock every retry and reset computation reads, injectable so a test can pin it. */
     public Clock clock;
+    /** Where the route's own diagnostics go. */
     public Logger log;
     /** Callback for user-visible notices (heal/fallback/exhaustion). Delivery is the caller's job,
      *  supplied via its own {@link Notifier} implementation. */

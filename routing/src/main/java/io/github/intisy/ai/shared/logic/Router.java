@@ -37,6 +37,13 @@ public final class Router {
 
     // -- routing --------------------------------------------------------------
 
+    /**
+     * Resolves one request to a response, healing and falling back along the tier's chain.
+     *
+     * @param req the request as the app sent it
+     * @param opts the profile, handlers and seams this route runs against
+     * @return the response to serve, including a synthesized one when every model is rate-limited
+     */
     public static HttpResponse route(HttpRequest req, RouterOptions opts) {
         String path = pathOf(req.url);
         if ("/health".equals(path)) return textResponse(200, "ok");
@@ -543,6 +550,10 @@ public final class Router {
      * {@link HttpRequest}, routes it, and stringifies the resulting {@link HttpResponse} as
      * {@code {status,headers,body}}. This is the export surface a non-JVM host (e.g. a TeaVM
      * transpile target) calls across the JS/Java boundary with plain strings.
+     *
+     * @param requestJson the request as {@code {method,url,headers,body}}
+     * @param opts the profile, handlers and seams this route runs against
+     * @return the response as {@code {status,headers,body}}
      */
     @SuppressWarnings("unchecked")
     public static String routeJson(String requestJson, RouterOptions opts) {
