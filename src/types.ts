@@ -55,8 +55,11 @@ export type ProxyHandler = {
  * and stays a flat 502.
  */
 export class HandleIrError extends Error {
+  /** The upstream HTTP status, which the front door reconstructs the response with. */
   status: number;
+  /** The upstream response headers, when the thrower kept them. */
   headers?: Record<string, string>;
+  /** The upstream response body, verbatim. */
   body: string;
   /** When set and no x-hub-retry-after-ms header is already present, the front door injects it so
    *  the router can compute the reset time without the thrower knowing the header name. */
@@ -109,7 +112,10 @@ export type Assignment = {
 export type Chain = Assignment[];
 
 /** Every tier's chain, always including `default`. */
-export type ModelMap = { [tier: string]: Chain } & { default: Chain };
+export type ModelMap = { [tier: string]: Chain } & {
+  /** The chain a request that names no tier routes through. */
+  default: Chain;
+};
 
 /** One model a provider offers, as the catalog cache describes it. */
 export type CatalogEntry = {
@@ -122,7 +128,12 @@ export type CatalogEntry = {
   /** Ranking weight within a tier, higher first. */
   score?: number;
   /** Token limits the provider reports, either half absent when it names none. */
-  limit?: { context?: number; output?: number };
+  limit?: {
+    /** Maximum input tokens the model accepts. */
+    context?: number;
+    /** Maximum output tokens the model produces. */
+    output?: number;
+  };
 };
 
 /** A rate-limit signal observed from one upstream response. */
@@ -157,7 +168,14 @@ export type RoutingProfile = {
   /** Output-token limit reported for a catalog entry that names none. */
   defaultOutput: number;
   /** Builds the app-shaped rate-limit response this proxy returns instead of a bare 429. */
-  nativeRateLimit: (info: RateLimitInfo) => Promise<{ status: number; headers: Record<string, string>; body: string }>;
+  nativeRateLimit: (info: RateLimitInfo) => Promise<{
+    /** HTTP status to serve, normally 429. */
+    status: number;
+    /** Response headers, including whatever retry hint the app reads. */
+    headers: Record<string, string>;
+    /** Response body, in the app's own error shape. */
+    body: string;
+  }>;
   /**
    * Test for a model native to this app; when the requested model matches, the "not in catalog"
    * notification is suppressed. When absent, unknown models always notify.

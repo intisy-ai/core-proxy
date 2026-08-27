@@ -188,7 +188,12 @@ export function resolveModelMap(configDir: string, profile: RoutingProfile): Mod
  * @param profile the profile naming the variable prefix
  * @returns the pairs to export, in the order they should be written
  */
-export function modelEnvPairs(configDir: string, profile: RoutingProfile): { key: string; value: string }[] {
+export function modelEnvPairs(configDir: string, profile: RoutingProfile): {
+  /** The environment variable's name. */
+  key: string;
+  /** Its value, unquoted, which the caller quotes for whichever shell it writes for. */
+  value: string;
+}[] {
   const eff = resolveModelMap(configDir, profile);
   const pairs: { key: string; value: string }[] = [];
   for (const tier of Object.keys(eff)) {
