@@ -11,6 +11,9 @@ import io.github.intisy.ai.ir.spi.IrHandler;
  */
 public interface HandlerResolver {
     /**
+     * Looks one provider up.
+     *
+     * @param provider the provider id a request routed to
      * @return the handler for {@code provider}, or {@code null} when unknown.
      */
     IrHandler resolve(String provider);

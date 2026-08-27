@@ -16,15 +16,23 @@ import io.github.intisy.ai.ir.spi.IrHandler;
  * transpiles cleanly, same rationale as {@link IrHandler}.
  *
  * <p>Unlike an {@link IrHandler}, a {@code ProxyPlugin} serves nothing itself: the
- * {@link io.github.intisy.ai.shared.logic.Router} plus the installed handlers do. A
+ * {@code Router} plus the installed handlers do. A
  * {@code ProxyPlugin} is purely declarative: it names the proxy and supplies the
  * {@link RoutingProfile} that configures a proxy instance for it.
  */
 public interface ProxyPlugin {
-    /** The proxy / host-app id (e.g. {@code "claude-code"}, {@code "opencode"}). */
+    /**
+     * Identifies the host app this proxy fronts.
+     *
+     * @return the proxy / host-app id (e.g. {@code "claude-code"}, {@code "opencode"})
+     */
     String id();
 
-    /** Human-readable name for the dashboard proxy card. */
+    /**
+     * Names the proxy for a reader.
+     *
+     * @return the human-readable name for the dashboard proxy card
+     */
     String displayName();
 
     /**
@@ -32,6 +40,8 @@ public interface ProxyPlugin {
      * does no tier mapping (e.g. opencode, which manages its own model list). A non-null profile with
      * a non-empty {@link RoutingProfile#tierOrder} is the host's signal to render that proxy's routing
      * (tier) surface; a {@code null} profile means "no routing surface".
+     *
+     * @return the routing profile, or {@code null} for a passthrough proxy
      */
     RoutingProfile profile();
 }
