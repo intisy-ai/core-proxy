@@ -13,9 +13,9 @@ dependencies {
 
     // A release-asset jar exports nothing, so what :ir used to hand over transitively is named
     // here: the seam interfaces Router's own signatures carry.
-    githubApi "intisy-ai:api:1.5.0:contract"
+    githubApi "intisy-ai:api:1.6.0:contract"
 
     // :seam carries the JSON narrowing helpers ModelsCache hand-rolls its Map<->POJO conversion
     // through, and the seam implementations the tests exercise instead of a local double.
-    githubImplementation "intisy-ai:api:1.5.0:seam"
+    githubImplementation "intisy-ai:api:1.6.0:seam"
 }
