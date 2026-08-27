@@ -12,10 +12,12 @@ graphify-out/
 **/.gradle/
 *.iml
 
-# TeaVM-generated JS, staged by build:teavm -- the .d.ts alongside it is hand-authored and committed
+# TeaVM-generated JS, staged by build:teavm. The .d.ts beside it is emitted by the same build and
+# committed, which src/__tests__/generated-dts.test.ts holds byte for byte.
 src/generated/*.js
 src/generated/*.js.map
 .idea/
 
 # Generated on the default branch by the release readme job.
 README.md
+site/

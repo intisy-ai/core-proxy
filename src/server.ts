@@ -8,6 +8,16 @@ import { initCoreProxy, getCoreProxy } from "./core-proxy-loader.js";
 import { catalogEntries } from "./model-map.js";
 import { profileJson, requestJson, routeDeps, type RoutedResult } from "./java-route.js";
 import type { ProxyOptions, ProxyServer } from "./types.js";
+/**
+ * Builds the always-on inbound proxy daemon.
+ *
+ * @remarks
+ * Each request routes to the chain assigned to its tier, falls back through that chain on a rate
+ * limit, and gets the profile's own synthesized 429 once every entry is exhausted.
+ *
+ * @param opts the config dir, profile, handler resolver and sinks this proxy runs with
+ * @returns the server, which does not listen until asked to
+ */
 export function createProxyServer(opts: ProxyOptions): ProxyServer {
   const configDir = opts.configDir;
   const port = opts.port ?? 34567;

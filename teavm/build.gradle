@@ -12,12 +12,17 @@ dependencies {
     // :seam and :js-base carry the implementations of the host-injected seams (SimpleJsonCodec,
     // InMemoryStore, JsHttpClientBridge, JsStoreBridge) that CoreProxyJs assembles. Embedding a copy
     // is the point of a TeaVM bundle; sharing the SOURCE is what stops it being duplicated.
-    githubImplementation "intisy-ai:api:1.2.0:seam"
-    githubImplementation "intisy-ai:api:1.2.0:js-base"
+    githubImplementation "intisy-ai:api:1.6.0:seam"
+    githubImplementation "intisy-ai:api:1.6.0:js-base"
     // core-ir's own js-base: the Translator and IrHandler bridges a routed request reaches its JS
     // translator and its JS-loaded provider through. Embedded deliberately, and cheaply: it shares
     // this bundle's io.github.intisy.ai.js package rather than restating those bridges here.
-    githubImplementation "intisy-ai:core-ir:1.3.1:js-base"
+    githubImplementation "intisy-ai:core-ir:1.4.0:js-base"
+    // SOURCE-retention, so nothing here reaches the bundle. The processor jar is a release asset and
+    // carries no transitive metadata, so the annotation types it reads are named beside it.
+    githubCompileOnly "intisy-ai:api:1.6.0:annotations"
+    githubAnnotationProcessor "intisy-ai:api:1.6.0:processor"
+    githubAnnotationProcessor "intisy-ai:api:1.6.0:annotations"
     teavm teavm.libs.jsoApis
 }
 
@@ -35,6 +40,7 @@ java {
 
 tasks.named("compileJava") {
     options.release = 17
+    options.compilerArgs << "-Atsemit.name=core-proxy.teavm"
 }
 
 // Same JVM-version attribute matching problem as compileJava, now that the root block also

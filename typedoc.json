@@ -1,0 +1,39 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": [
+    "src/index.ts"
+  ],
+  "out": "site",
+  "name": "@intisy-ai/core-proxy",
+  "excludePrivate": true,
+  "treatWarningsAsErrors": true,
+  "validation": {
+    "notExported": true,
+    "invalidLink": true,
+    "notDocumented": true
+  },
+  "highlightLanguages": [
+    "bash",
+    "java",
+    "js",
+    "json",
+    "ts",
+    "typescript"
+  ],
+  "ignoredHighlightLanguages": [
+    "mermaid"
+  ],
+  "sourceLinkTemplate": "https://github.com/intisy-ai/core-proxy/blob/{gitRevision}/{path}#L{line}",
+  "tsconfig": "./tsconfig.json",
+  "intentionallyNotExported": [
+    "__module"
+  ],
+  "externalSymbolLinkMappings": {
+    "@intisy-ai/core-ir": {
+      "*": "https://github.com/intisy-ai/core-ir"
+    },
+    "global": {
+      "makeVendorTranslator": "https://github.com/intisy-ai/core-ir"
+    }
+  }
+}

@@ -43,11 +43,18 @@ function modelCache(configDir: string): ModelCacheMap {
   return {};
 }
 
-// Tiers are detected from the tier-source provider's catalog (family token of each model id, via
-// profile.tierRegex, e.g. a model id containing "fable" maps to family "fable"), so new families
-// appear as mapping slots automatically. profile.tierOrder keeps known families in a familiar
-// order; profile.tierFallback covers pre-login (no catalog yet). Delegates to
-// CoreProxyJs.resolveTiersJson (ModelMap.resolveTiers).
+/**
+ * Detects the tier names from the tier-source provider's catalog.
+ *
+ * @remarks
+ * A tier is the family token of each model id, taken with `profile.tierRegex`, so a new model
+ * family gets a mapping slot on its own. `profile.tierOrder` keeps known families in a familiar
+ * order and `profile.tierFallback` covers pre-login, when there is no catalog yet.
+ *
+ * @param configDir where the catalog cache lives
+ * @param profile the profile naming the tier source, order and fallback
+ * @returns the tier names, in the order a reader expects them
+ */
 export function claudeTiers(configDir: string, profile: RoutingProfile): string[] {
   const storeJson = JSON.stringify({ "models.json": JSON.stringify(modelCache(configDir)) });
   const profileJson = JSON.stringify(profileToJson(profile));
@@ -55,6 +62,13 @@ export function claudeTiers(configDir: string, profile: RoutingProfile): string[
   return JSON.parse(core.resolveTiersJson(profileJson, storeJson)) as string[];
 }
 
+/**
+ * Reads the stored mapping out of the app's loader config.
+ *
+ * @param configDir where the config lives
+ * @param profile the profile naming the config file
+ * @returns the stored mapping, empty on absence or any parse failure
+ */
 export function readModelMap(configDir: string, profile: RoutingProfile): Record<string, unknown> {
   try {
     const p = join(configFolder(configDir), profile.configFile);
@@ -63,8 +77,16 @@ export function readModelMap(configDir: string, profile: RoutingProfile): Record
   return {};
 }
 
-// Live catalog [{provider, model, name}] from each deployed provider's authProviders, preferring
-// core-auth's fetched cache, else the package's static list.
+/**
+ * Gathers the live catalog from every deployed provider.
+ *
+ * @remarks
+ * Prefers core-auth's fetched cache and falls back to each package's static list, so a host that
+ * has never logged in still has models to map.
+ *
+ * @param configDir where the deployed providers and the cache live
+ * @returns every model on offer, across all providers
+ */
 export function catalogEntries(configDir: string): CatalogEntry[] {
   const out: CatalogEntry[] = [];
   const reposDir = join(configDir, "repos");
@@ -108,25 +130,38 @@ export function catalogEntries(configDir: string): CatalogEntry[] {
   return out;
 }
 
-// Normalize a stored slot value into an ordered chain: a single {provider,model} becomes [obj]; an
-// array stays; anything else becomes []. First entry is the primary, the rest are ordered fallbacks
-// the proxy tries when earlier ones are rate-limited.
+/**
+ * Normalizes a stored slot value into an ordered chain.
+ *
+ * @remarks
+ * A single assignment becomes a one-entry chain, an array stays one, anything else becomes empty.
+ * The first entry is the primary and the rest are the fallbacks the proxy tries when earlier ones
+ * are rate-limited.
+ *
+ * @param raw the stored slot value, of whatever shape it was written in
+ * @returns the chain, empty when nothing usable was stored
+ */
 export function normalizeChain(raw: unknown): Chain {
   if (!raw) return [];
   const arr = Array.isArray(raw) ? raw : [raw];
   return arr.filter((e): e is Assignment => !!e && !!(e as Assignment).provider && !!(e as Assignment).model);
 }
 
-// Effective tier -> ordered chain of {provider, model, name, derived}. Each stored entry is kept
-// while its model still exists in the catalog; a fully stale tier heals only within the provider the
-// user chose, never silently to a different provider (a mapping to one provider's model must not
-// become a mapping to a different provider and then gate on its accounts). When the chosen provider
-// has no catalog at all, the stored entry passes through untouched (the catalog may simply not be
-// fetched yet; if the model is really gone the provider reports its own clear error). Only a tier with no stored
-// choice derives from the whole catalog. "-auto" ids skipped. Delegates to
-// CoreProxyJs.resolveModelMapJson (ModelMap.resolveModelMap), seeded with the stored mapping file and
-// the full catalogEntries() output (declared authProviders plus their cached or static models), so
-// the Java side resolves over the identical catalog this function has always built from disk.
+/**
+ * Resolves each tier to the chain the proxy will actually route through.
+ *
+ * @remarks
+ * A stored entry is kept while its model still exists in the catalog. A fully stale tier heals only
+ * within the provider the user chose, never silently to a different one: a mapping to one provider's
+ * model must not become a mapping to another and then gate on its accounts. When the chosen provider
+ * has no catalog at all the stored entry passes through untouched, because the catalog may simply
+ * not be fetched yet and a genuinely missing model draws the provider's own clear error. Only a tier
+ * with no stored choice derives from the whole catalog, and `-auto` ids are skipped.
+ *
+ * @param configDir where the stored mapping and the catalog live
+ * @param profile the profile naming the config file and the tier source
+ * @returns each tier's ordered chain, always including `default`
+ */
 export function resolveModelMap(configDir: string, profile: RoutingProfile): ModelMap {
   const storeJson = JSON.stringify({
     // read by ModelMap.resolveTiers internally, to detect the tier list from the tier-source
@@ -140,11 +175,25 @@ export function resolveModelMap(configDir: string, profile: RoutingProfile): Mod
   return JSON.parse(core.resolveModelMapJson(profileJson, storeJson)) as ModelMap;
 }
 
-// {key,value} env pairs the wrapper exports so the app's /model shows the mapped models as custom
-// tier entries (real names via *_NAME) and uses the default tier as the session default. Values
-// (display names) can contain spaces/parens, so the caller quotes per shell, hence pairs, not
-// pre-joined lines.
-export function modelEnvPairs(configDir: string, profile: RoutingProfile): { key: string; value: string }[] {
+/**
+ * Builds the environment pairs the wrapper exports.
+ *
+ * @remarks
+ * They make the app's own model picker show the mapped models as custom tier entries, with real
+ * names through the `_NAME` variables, and make the default tier the session default. Returned as
+ * pairs rather than joined lines because a display name can contain spaces and parentheses, so the
+ * caller quotes each value for whichever shell it writes for.
+ *
+ * @param configDir where the stored mapping and the catalog live
+ * @param profile the profile naming the variable prefix
+ * @returns the pairs to export, in the order they should be written
+ */
+export function modelEnvPairs(configDir: string, profile: RoutingProfile): {
+  /** The environment variable's name. */
+  key: string;
+  /** Its value, unquoted, which the caller quotes for whichever shell it writes for. */
+  value: string;
+}[] {
   const eff = resolveModelMap(configDir, profile);
   const pairs: { key: string; value: string }[] = [];
   for (const tier of Object.keys(eff)) {

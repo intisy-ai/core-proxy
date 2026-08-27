@@ -18,6 +18,12 @@ public final class RateLimit {
     private RateLimit() {
     }
 
+    /**
+     * Whether one upstream response says the caller is being rate-limited.
+     *
+     * @param resp the response to read
+     * @return true for a 429 or the hub's own rate-limit marker header
+     */
     public static boolean isRateLimited(HttpResponse resp) {
         return resp.status == 429 || "1".equals(header(resp, "x-hub-rate-limited"));
     }
@@ -25,6 +31,10 @@ public final class RateLimit {
     /**
      * Earliest epoch-ms the response says it'll be usable again ({@code x-hub-retry-after-ms},
      * else {@code retry-after} seconds). {@code now} is caller-supplied (injectable for tests).
+     *
+     * @param resp the response carrying the retry hint
+     * @param now the current time in epoch milliseconds
+     * @return the reset time in epoch milliseconds, or 0 when the response names none
      */
     public static long rateLimitResetMs(HttpResponse resp, long now) {
         int xr = parseIntLenient(header(resp, "x-hub-retry-after-ms"));
@@ -39,6 +49,11 @@ public final class RateLimit {
      * (status/headers/body) entirely to {@code profile.nativeRateLimit}, which owns its upstream's
      * rate-limit header conventions and error format. The profile is the sole owner of the
      * synthesized headers; this engine overlays nothing on top of what the profile returns.
+     *
+     * @param lastResp the final upstream response, which the profile may echo from
+     * @param resetMs the reset time in epoch milliseconds, or 0 when unknown
+     * @param profile the profile owning this app's rate-limit shape
+     * @return the response to serve, exactly as the profile built it
      */
     public static HttpResponse rateLimitFinal(HttpResponse lastResp, long resetMs, RoutingProfile profile) {
         RoutingProfile.Synth s = profile.nativeRateLimit.build(new RateLimitInfo(resetMs, lastResp));

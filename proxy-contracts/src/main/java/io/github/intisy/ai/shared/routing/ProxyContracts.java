@@ -11,6 +11,7 @@ import io.github.intisy.ai.tsemit.TsConstant;
  */
 public final class ProxyContracts {
 
+    /** The capability a plugin provides to become the app-to-IR front door for one host app. */
     @TsConstant(type = "CapabilityType<FrontDoorCapability>", id = "front-door")
     public static final Object FRONT_DOOR = null;
 

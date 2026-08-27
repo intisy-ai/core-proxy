@@ -40,9 +40,17 @@ public final class ModelMap {
     /** A {key,value} env pair. Kept as two plain fields, not a pre-joined line, since values
      *  (display names) can contain spaces/parens that the caller must quote per shell. */
     public static class KV {
+        /** The environment variable's name. */
         public final String key;
+        /** Its value, unquoted, which the caller quotes for whichever shell it writes for. */
         public final String value;
 
+        /**
+         * Pairs one variable with its value.
+         *
+         * @param key the variable name
+         * @param value its unquoted value
+         */
         public KV(String key, String value) {
             this.key = key;
             this.value = value;
@@ -61,6 +69,11 @@ public final class ModelMap {
      * {@code profile.tierRegex}, e.g. {@code claude-fable-5 -> "fable"}), so new families appear as
      * mapping slots automatically. {@code profile.tierOrder} keeps known families in a familiar
      * order; {@code profile.tierFallback} covers pre-login (no catalog yet).
+     *
+     * @param store where the cached catalog is read from
+     * @param json the codec that parses it
+     * @param p the profile naming the tier source, order and fallback
+     * @return the tier names, in the order a reader expects them
      */
     public static List<String> resolveTiers(Store store, JsonCodec json, RoutingProfile p) {
         ModelsCache cache = new ModelsCache(store, json);
@@ -92,8 +105,15 @@ public final class ModelMap {
 
     // -- stored map --------------------------------------------------------------
 
-    /** Reads the store key {@code p.configFile}'s {@code modelMap} object, or {} on any
-     *  absence/parse failure. */
+    /**
+     * Reads the store key {@code p.configFile}'s {@code modelMap} object, or an empty map on any
+     * absence or parse failure.
+     *
+     * @param store where the config is read from
+     * @param json the codec that parses it
+     * @param p the profile naming the config key
+     * @return the stored mapping, empty when there is none to read
+     */
     @SuppressWarnings("unchecked")
     public static Map<String, Object> readModelMap(Store store, JsonCodec json, RoutingProfile p) {
         try {
@@ -117,6 +137,11 @@ public final class ModelMap {
      * Live catalog for the given provider ids, read from the shared {@link ModelsCache} (store key
      * {@code models.json}), preferring each provider's ranking (best first) when core-auth computed
      * one, else catalog order. A provider with no cached models is skipped.
+     *
+     * @param store where the cache is read from
+     * @param json the codec that parses it
+     * @param providerIds the providers to gather, in the order they should appear
+     * @return every catalog entry those providers offer
      */
     public static List<CatalogEntry> catalogEntries(Store store, JsonCodec json, List<String> providerIds) {
         List<CatalogEntry> out = new ArrayList<>();
@@ -232,6 +257,9 @@ public final class ModelMap {
      * Normalize a stored slot value into an ordered chain: a single {provider,model} becomes [obj]; a
      * list stays a list; anything else becomes []. First entry is the primary, the rest are ordered
      * fallbacks. Entries missing provider/model are filtered out.
+     *
+     * @param raw the stored slot value, of whatever shape it was written in
+     * @return the chain, primary first, empty when nothing usable was stored
      */
     public static List<Assignment> normalizeChain(Object raw) {
         List<Assignment> out = new ArrayList<>();
@@ -283,6 +311,11 @@ public final class ModelMap {
      * must not become the tier-source provider). When the chosen provider has no catalog at all, the
      * stored entry passes through untouched. Only a tier with no stored choice derives from the whole
      * catalog. "-auto" ids are skipped. A {@code default} key is always present.
+     *
+     * @param store where the stored map and the catalog are read from
+     * @param json the codec that parses them
+     * @param p the profile naming the config key and the tier source
+     * @return each tier's ordered chain, always including {@code default}
      */
     public static Map<String, List<Assignment>> resolveModelMap(Store store, JsonCodec json, RoutingProfile p) {
         Map<String, Object> stored = readModelMap(store, json, p);
@@ -396,6 +429,11 @@ public final class ModelMap {
     /**
      * {key,value} env pairs the wrapper exports so the app's /model shows the mapped models as custom
      * tier entries (real names via *_NAME) and uses the default tier as the session default.
+     *
+     * @param store where the effective map is resolved from
+     * @param json the codec that parses it
+     * @param p the profile naming the variable prefix
+     * @return the pairs to export, in the order they should be written
      */
     public static List<KV> modelEnvPairs(Store store, JsonCodec json, RoutingProfile p) {
         Map<String, List<Assignment>> eff = resolveModelMap(store, json, p);

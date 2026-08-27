@@ -75,6 +75,12 @@ export function profileJson(profile: RoutingProfile, configDir: string): string 
   });
 }
 
+/**
+ * Marshals an inbound request into the JSON shape the Java router reads.
+ *
+ * @param request the request as the app sent it
+ * @returns its method, url, headers and body as one JSON object
+ */
 export async function requestJson(request: Request): Promise<string> {
   const url = new URL(request.url);
   const headers: Record<string, string> = {};
@@ -196,27 +202,50 @@ const ACTIVITY_TOPICS: Record<string, string> = {
   rate_limited: "account.rate_limited",
 };
 
+/** One routing event, already filed under the topic this host chose for it. */
 export type ActivitySpec = {
+  /** Where the host files the event. */
   topic: string;
+  /** What happened, as the engine names it. */
   action: string;
+  /** What it cost the request. */
   impact?: string;
+  /** The event's own payload, whose shape belongs to the event. */
   details?: unknown;
 };
 
+/** Everything {@link routeDeps} needs to build the seam object the Java router asks for. */
 export type RouteDepsOptions = {
+  /** Where the app's configuration and caches live. */
   configDir: string;
+  /** How this app tiers, maps and rate-limits. */
   profile: RoutingProfile;
+  /** Where the route's diagnostics go. */
   log: (message: string) => void;
+  /** Where user-visible notices go. */
   notify: (message: string, level?: string) => void;
+  /** Where routing events are recorded, alongside the message `notify` shows. */
   emitActivity: (spec: ActivitySpec) => void;
+  /** Turns a provider id into the handler that serves it. */
   resolveHandler: (provider: string) => Promise<TsHandler | null>;
+  /** Every provider the router may route to, read fresh on every request. */
   listProviders: () => string[];
+  /** Whether the caller can take a streamed body; false makes the router buffer instead. */
   wantsStream: boolean;
   /** Receives each already-encoded wire frame of a streamed body, in order. */
   emit: (frame: string) => void;
+  /** Called once a streamed body ends, with the failure that ended it or null. */
   close: (error: string | null) => void;
 };
 
+/**
+ * Builds the seam object the Java router calls back out through.
+ *
+ * @param opts this host's surfaces, as {@link RouteDepsOptions} describes them
+ * @returns the deps object, with the profile's translator handles already resolved
+ * @throws Error when the profile carries a translator predating core-ir 1.3.0, which exposes no
+ * synchronous handles and so cannot drive the router
+ */
 export async function routeDeps(opts: RouteDepsOptions): Promise<CoreProxyJsRouteDeps> {
   // A profile with no translator is a supported shape: the engine then has no IR front door and
   // routes through a handler's own app-wire path.

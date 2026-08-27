@@ -44,6 +44,10 @@ public final class CoreProxyJs {
      * {@code {storeKey: jsonStringValue}} used to seed the in-memory {@link Store} (e.g.
      * {@code {"router-test.json":"{\"modelMap\":{...}}"}}); Store values are themselves opaque JSON
      * strings per the {@link Store} SPI contract.
+     *
+     * @param storeJson the store snapshot to seed from
+     * @param requestJson the request to route
+     * @return the response as JSON
      */
     @JSExport
     public static String routeJsonSync(String storeJson, String requestJson) {
@@ -58,6 +62,9 @@ public final class CoreProxyJs {
      * {@code Router} involved. Exists so a TS consumer test can prove, through the actually-shipped
      * export surface, that a whole-number JSON value stays byte-compatible with the JVM's gson-backed
      * codec output for the same input.
+     *
+     * @param json any JSON document
+     * @return the same document, parsed and stringified again
      */
     @JSExport
     public static String jsonRoundTrip(String json) {
@@ -71,6 +78,10 @@ public final class CoreProxyJs {
      * {@code tierSourceProvider}/{@code tierOrder}/{@code tierFallback}/{@code tierRegex};
      * {@code storeJson} is a Store snapshot (typically just a seeded {@code models.json}). Returns the
      * resolved tier list as a JSON array.
+     *
+     * @param profileJson the routing profile
+     * @param storeJson the store snapshot to seed from
+     * @return the tier names as a JSON array
      */
     @JSExport
     public static String resolveTiersJson(String profileJson, String storeJson) {
@@ -85,6 +96,10 @@ public final class CoreProxyJs {
      * {@code ModelMap.resolveModelMap} export over a one-shot store snapshot (parity/test use; see
      * {@link #resolveModelMap} for the version over a live JS store). Returns
      * {@code {tier: [{provider,model,name,derived}, ...]}} as JSON.
+     *
+     * @param profileJson the routing profile
+     * @param storeJson the store snapshot to seed from
+     * @return each tier's ordered chain, as JSON
      */
     @JSExport
     public static String resolveModelMapJson(String profileJson, String storeJson) {
@@ -100,6 +115,10 @@ public final class CoreProxyJs {
      * {@link JsStoreBridge}, no snapshot), reading the tier-source provider's catalog from store key
      * {@code models.json}. {@code profileJson} shape matches {@link #resolveTiersJson}'s. Returns the
      * resolved tier list as a JSON array of strings.
+     *
+     * @param profileJson the routing profile
+     * @param jsStore the live JS store, read through on demand
+     * @return the tier names as a JSON array
      */
     @JSExport
     public static String resolveTiers(String profileJson, JsStoreBridge.JsStore jsStore) {
@@ -115,6 +134,10 @@ public final class CoreProxyJs {
      * stored {@code modelMap}, plus {@code models.json} for the live catalog): the fine-grained call
      * a TS driver makes instead of routing a whole request through {@link #routeJsonAsync}. Returns
      * {@code {tier: [{provider,model,name,derived}, ...]}} JSON.
+     *
+     * @param profileJson the routing profile
+     * @param jsStore the live JS store, read through on demand
+     * @return each tier's ordered chain, as JSON
      */
     @JSExport
     public static String resolveModelMap(String profileJson, JsStoreBridge.JsStore jsStore) {
@@ -184,6 +207,11 @@ public final class CoreProxyJs {
      *
      * <p>{@code jsStore} is the live JS store object itself, bridged via {@link JsStoreBridge}, no
      * snapshot. The registered provider handler is a bare forward with no account claiming.
+     *
+     * @param httpSend the host's transport, which the Java call chain suspends across
+     * @param jsStore the live JS store, read through on demand
+     * @param requestJson the request to route
+     * @return the response's JSON
      */
     @JSExport
     public static JSPromise<JSString> routeJsonAsync(JsHttpClientBridge.JsHttpSend httpSend,
@@ -225,6 +253,11 @@ public final class CoreProxyJs {
      * true the body has already been pushed to {@code deps.emit} frame by frame and {@code deps.close}
      * has been called, so {@code body} is absent; a stream that died after its first frame adds
      * {@code streamError}, because by then the status line cannot be taken back.
+     *
+     * @param deps every seam the route needs from the host
+     * @param profileJson the routing profile
+     * @param requestJson the request to route
+     * @return the outcome's JSON
      */
     @JSExport
     public static JSPromise<JSString> routeRequest(JsRouteDeps deps, String profileJson, String requestJson) {

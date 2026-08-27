@@ -1,0 +1,19 @@
+{
+  "$schema": "./node_modules/@intisy-ai/api/schema/plugin.schema.json",
+  "id": "core-proxy",
+  "api": 1,
+  "publish": {
+    "scopedOnly": true,
+    "jarModule": [
+      "routing",
+      "proxy-contracts"
+    ]
+  },
+  "repo": {
+    "role": "Generic routing and rate-limit proxy engine",
+    "category": "core-library",
+    "tech": [
+      "typescript"
+    ]
+  }
+}

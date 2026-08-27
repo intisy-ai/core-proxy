@@ -22,6 +22,12 @@ public class ModelsCache {
     private final Store store;
     private final JsonCodec json;
 
+    /**
+     * Opens the cache over one store.
+     *
+     * @param store where the document lives
+     * @param json the codec that reads and writes it
+     */
     public ModelsCache(Store store, JsonCodec json) {
         this.store = store;
         this.json = json;
@@ -29,15 +35,24 @@ public class ModelsCache {
 
     /** Per-provider cache entry. */
     public static class Entry {
+        /** Every model the provider offers, keyed by model id. */
         public Map<String, Object> models;
+        /** Model ids best first, when the provider computed a ranking. */
         public List<String> ranking;
+        /** The model served when a request names none. */
         public String defaultModelId;
-        public String source;                    // "live" | "static" | "": fetched-now vs shipped fallback
-        public List<Object> sorts;                // [{id, label}, ...], opaque
+        /** {@code "live"} when fetched now, {@code "static"} for the shipped fallback, else empty. */
+        public String source;
+        /** The sort options the dashboard offers, as opaque {@code {id, label}} objects. */
+        public List<Object> sorts;
+        /** Model ids per sort option, keyed by sort id. */
         public Map<String, List<String>> sortOrders;
+        /** Per-model scores, keyed by model id. */
         public Map<String, Object> scores;
+        /** Where the scores came from, for a reader deciding how much to trust them. */
         public String scoreSource;
-        public Long fetchedAt;                    // epoch ms
+        /** When the entry was fetched, in epoch milliseconds. */
+        public Long fetchedAt;
     }
 
     private Map<String, Object> readAllRaw() {
@@ -108,6 +123,9 @@ public class ModelsCache {
 
     /**
      * Returns the provider's cached entry, or {@code null} if there is none or it has no models.
+     *
+     * @param providerId the provider to look up
+     * @return its entry, or {@code null} when nothing usable is cached
      */
     public Entry read(String providerId) {
         Map<String, Object> m = JsonUtil.asMap(readAllRaw().get(providerId));
@@ -119,6 +137,9 @@ public class ModelsCache {
     /**
      * Read-modify-write: merges {@code entry} into the stored map under {@code providerId} and
      * rewrites the whole document.
+     *
+     * @param providerId the provider to write under
+     * @param entry what to store for it
      */
     public void write(String providerId, Entry entry) {
         Map<String, Object> all = readAllRaw();
