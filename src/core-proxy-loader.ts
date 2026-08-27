@@ -6,6 +6,12 @@
 let coreProxyModule: typeof import("./generated/core-proxy.teavm.js") | null = null;
 let coreProxyModulePromise: Promise<typeof import("./generated/core-proxy.teavm.js")> | null = null;
 
+/**
+ * Loads the TeaVM module once, at startup.
+ *
+ * @remarks
+ * Concurrent callers share one import; a second call after it resolves does nothing.
+ */
 export async function initCoreProxy(): Promise<void> {
   if (coreProxyModule) return;
   if (!coreProxyModulePromise) {
@@ -14,6 +20,12 @@ export async function initCoreProxy(): Promise<void> {
   coreProxyModule = await coreProxyModulePromise;
 }
 
+/**
+ * Reads the already-loaded TeaVM module synchronously.
+ *
+ * @returns the module, so a routing decision need not be async
+ * @throws Error when {@link initCoreProxy} has not resolved yet
+ */
 export function getCoreProxy(): typeof import("./generated/core-proxy.teavm.js") {
   if (!coreProxyModule) {
     throw new Error("core-proxy TeaVM module not initialized; call initCoreProxy() at startup");

@@ -7,12 +7,24 @@
 import { decodeIr, encodeIrResult, handleIrErrorToResponse } from "./ir-codec.js";
 import type { HandlerCtx, IrEventStream, IrRequest, IrResponse, RoutingProfile } from "./types.js";
 
+/** What the in-process front door needs to serve one provider. */
 export interface ServeIrOptions {
+  /** The profile whose translator owns this app's wire format. */
   profile: RoutingProfile;
+  /** The provider's IR-native entry point. */
   handleIr: (ir: IrRequest, ctx: HandlerCtx) => Promise<IrResponse | IrEventStream>;
+  /** The per-request runtime handed to the provider. */
   ctx: HandlerCtx;
 }
 
+/**
+ * Serves one request against a single provider, with no routing.
+ *
+ * @param request the request as the app sent it
+ * @param opts the profile, handler and runtime to serve it with
+ * @returns the response in the app's wire format, a 400 when the body does not decode, or the
+ * reconstructed upstream response when the handler threw a transport error
+ */
 export async function serveIr(request: Request, opts: ServeIrOptions): Promise<Response> {
   const log = opts.ctx?.log ?? (() => {});
   const ir = await decodeIr(opts.profile, request, log);

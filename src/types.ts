@@ -4,19 +4,28 @@
 import type { IrRequest, IrResponse, IrStreamEvent, VendorTranslator, WithVendorHandles } from "@intisy-ai/core-ir";
 export type { IrRequest, IrResponse, IrStreamEvent, VendorTranslator, WithVendorHandles } from "@intisy-ai/core-ir";
 
+/** The per-request runtime the router hands a handler. */
 export type HandlerCtx = {
+  /** Where the app's configuration and caches live. */
   configDir: string;
+  /** Where the handler's own diagnostics go. */
   log: (m: string) => void;
+  /** The upstream model id to call, after any tier or alias rewrite. */
   model: string;
-  // The resolved provider id serving this request. A handler backing several providers
-  // (e.g. a shared account pool with distinct upstream lanes) reads it to pick the lane.
+  /**
+   * The resolved provider id serving this request. A handler backing several providers
+   * (e.g. a shared account pool with distinct upstream lanes) reads it to pick the lane.
+   */
   provider: string;
 };
 
-// A stream of canonical IR events produced directly by a provider's handleIr, not vendor SSE
-// bytes (those exist only at the wire boundary, encoded by the translator).
+/**
+ * A stream of canonical IR events produced directly by a provider's `handleIr`, not vendor SSE
+ * bytes: those exist only at the wire boundary, encoded by the translator.
+ */
 export type IrEventStream = ReadableStream<IrStreamEvent>;
 
+/** A provider's entry point, on the IR path, the app-wire path, or both. */
 export type ProxyHandler = {
   /**
    * Receives an already-decoded IrRequest and returns an IrResponse (non-streaming) or an
@@ -81,57 +90,82 @@ export function isHandleIrError(e: unknown): e is HandleIrError {
   );
 }
 
+/** Turns a provider id into the handler that serves it, or null when none is installed. */
 export type HandlerResolver = (providerName: string) => Promise<ProxyHandler | null>;
 
+/** A resolved provider and model for one request. */
 export type Assignment = {
+  /** The provider id that will serve the request. */
   provider: string;
+  /** The upstream model id to send. */
   model: string;
+  /** The display name, as a dashboard or log line shows it. */
   name?: string;
+  /** Whether the model was derived from a tier rather than named by the request. */
   derived?: boolean;
 };
 
+/** One tier's assignments, primary first, the rest ordered fallbacks. */
 export type Chain = Assignment[];
 
+/** Every tier's chain, always including `default`. */
 export type ModelMap = { [tier: string]: Chain } & { default: Chain };
 
+/** One model a provider offers, as the catalog cache describes it. */
 export type CatalogEntry = {
+  /** The provider id offering this model. */
   provider: string;
+  /** The upstream model id, as the provider names it. */
   model: string;
+  /** The display name for the model. */
   name?: string;
+  /** Ranking weight within a tier, higher first. */
   score?: number;
+  /** Token limits the provider reports, either half absent when it names none. */
   limit?: { context?: number; output?: number };
 };
 
+/** A rate-limit signal observed from one upstream response. */
 export type RateLimitInfo = {
+  /** Epoch milliseconds at which the limit lifts, or 0 when the upstream named no reset. */
   resetMs: number;
+  /** The response the signal was read from, kept so a synthesized reply can echo it. */
   upstream: Response | null;
 };
 
+/** How one app tiers its models, maps them, and shapes its own rate-limit reply. */
 export type RoutingProfile = {
+  /** Store key holding the app's loader config, whose `modelMap` object carries the mapping. */
   configFile: string;
   /**
    * Loader-facing config field name for the routing-enable toggle, read by the loader, not by this
    * engine. Do not wire it into readModelMap, which reads the separate `modelMap` field.
    */
   routingKey: string;
+  /** The provider whose catalog the tier names are derived from. */
   tierSourceProvider: string;
+  /** Known tier names, in the order a reader expects to see them. */
   tierOrder: string[];
+  /** Tiers offered before any catalog exists, which is what a pre-login host sees. */
   tierFallback: string[];
+  /** Extracts a tier name from a model id, so a new model family gets a mapping slot on its own. */
   tierRegex: RegExp;
+  /** Prefix for the environment variables the model map exports, which the host app reads. */
   envPrefix: string;
+  /** Input-token limit reported for a catalog entry that names none. */
   defaultContext: number;
+  /** Output-token limit reported for a catalog entry that names none. */
   defaultOutput: number;
+  /** Builds the app-shaped rate-limit response this proxy returns instead of a bare 429. */
   nativeRateLimit: (info: RateLimitInfo) => Promise<{ status: number; headers: Record<string, string>; body: string }>;
-  // Test for a model native to this app; when the requested model matches, the "not in catalog"
-  // notification is suppressed. When absent, unknown models always notify.
+  /**
+   * Test for a model native to this app; when the requested model matches, the "not in catalog"
+   * notification is suppressed. When absent, unknown models always notify.
+   */
   nativeModelPattern?: RegExp;
   /**
-   * The app<->IR translator for this profile (e.g. one of core-ir's per-vendor translators, shared
-   * by every app that speaks the same wire format). Undefined means the profile has no IR
-   * front-door: the server then uses only the handle() path.
-   */
-  /**
-   * The app<->IR translator for this profile.
+   * The app-to-IR translator for this profile, undefined when the profile has no IR front door and
+   * the server uses only the `handle()` path.
    *
    * Carries {@link WithVendorHandles} because the routing engine is Java and reaches a translator
    * through a synchronous seam, so it needs the vendor module's own string functions rather than the
@@ -140,21 +174,38 @@ export type RoutingProfile = {
   translator?: VendorTranslator & WithVendorHandles;
 };
 
+/** Everything `createProxyServer` needs to stand one proxy up. */
 export type ProxyOptions = {
+  /** Where the app's configuration and caches live. */
   configDir: string;
+  /** How this app tiers, maps and rate-limits. */
   profile: RoutingProfile;
+  /** Turns a provider id into the handler that serves it. */
   resolveHandler: HandlerResolver;
+  /** Port to listen on; the server picks one when omitted. */
   port?: number;
+  /** Where the server's own diagnostics go. */
   log?: (m: string) => void;
+  /** Where user-visible notices go. */
   notify?: (m: string, level?: string) => void;
+  /** Where routing events are recorded, alongside the message `notify` shows. */
   emitActivity?: (spec: { topic: string; action: string; actor?: string; impact?: string; subject?: any; details?: any }) => void;
 };
 
+/** A proxy that has been built but not necessarily started. */
 export type ProxyServer = {
+  /** Starts listening and resolves the port actually bound. */
   listen: () => Promise<number>;
+  /** Stops listening and releases the port. */
   close: () => Promise<void>;
 };
 
+/**
+ * Whether a value carries everything the router needs from a profile.
+ *
+ * @param p the candidate, of any shape
+ * @returns true when every required field is present and of the right type
+ */
 export function isValidProfile(p: any): p is RoutingProfile {
   return (
     !!p &&

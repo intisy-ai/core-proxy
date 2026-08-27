@@ -26,7 +26,7 @@ public class RoutingProfile {
     public List<String> tierFallback;
     /** Extracts a tier name from a model id, so a new model family gets a mapping slot on its own. */
     public Pattern tierRegex;
-    /** Prefix for the environment variables the model map exports, e.g. {@code ANTHROPIC}. */
+    /** Prefix for the environment variables the model map exports, which the host app reads. */
     public String envPrefix;
     /** Input-token limit reported for a catalog entry that names none. */
     public int defaultContext;

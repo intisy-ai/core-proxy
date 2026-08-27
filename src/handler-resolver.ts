@@ -8,6 +8,13 @@ import type { HandlerResolver, ProxyHandler } from "./types.js";
 
 type HandlerCacheEntry = { path: string; mtime: number; mod: unknown };
 
+/**
+ * Builds a resolver that imports each provider's handler module from disk.
+ *
+ * @param listProviders the installed providers and where their handler modules live, read fresh
+ * @returns a resolver returning null for a provider with no handler, and for a module exporting
+ * neither `handle` nor `handleIr`
+ */
 export function makeDynamicResolver(
   listProviders: () => { provider: string; handlerPath: string }[]
 ): HandlerResolver {

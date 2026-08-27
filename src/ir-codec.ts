@@ -5,6 +5,15 @@
 import { isHandleIrError } from "./types.js";
 import type { IrEventStream, IrRequest, IrResponse, RoutingProfile } from "./types.js";
 
+/**
+ * Decodes an inbound wire request into canonical IR.
+ *
+ * @param profile the profile whose translator owns this app's wire format
+ * @param request the request as the app sent it
+ * @param log where a decode failure is reported
+ * @returns the IR request, or null when the profile has no translator, the body is empty, or the
+ * decode failed, each of which sends the caller down the wire path instead
+ */
 export async function decodeIr(profile: RoutingProfile, request: Request, log: (m: string) => void): Promise<IrRequest | null> {
   if (!profile.translator) return null;
   try {
@@ -17,6 +26,13 @@ export async function decodeIr(profile: RoutingProfile, request: Request, log: (
   }
 }
 
+/**
+ * Encodes an IR result back into the app's wire format.
+ *
+ * @param profile the profile whose translator owns this app's wire format
+ * @param irResult a buffered response or a stream of IR events
+ * @returns a JSON response, or an event-stream response when the result was a stream
+ */
 export async function encodeIrResult(profile: RoutingProfile, irResult: IrResponse | IrEventStream): Promise<Response> {
   const translator = profile.translator!;
   if (irResult instanceof ReadableStream) {
@@ -28,6 +44,13 @@ export async function encodeIrResult(profile: RoutingProfile, irResult: IrRespon
   return new Response(wire, { status: 200, headers: { "content-type": "application/json" } });
 }
 
+/**
+ * Rebuilds a wire response from a typed transport error, so the router can route on it.
+ *
+ * @param e whatever a handler threw
+ * @returns the reconstructed response, with the retry hint injected when the thrower supplied one,
+ * or null when the throw was not a transport error and is a genuine failure
+ */
 export function handleIrErrorToResponse(e: unknown): Response | null {
   if (!isHandleIrError(e)) return null;
   const headers = new Headers(e.headers);
