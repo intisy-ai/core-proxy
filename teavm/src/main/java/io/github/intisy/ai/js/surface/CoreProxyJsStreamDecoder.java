@@ -12,6 +12,11 @@ import io.github.intisy.ai.tsemit.TsInterface;
 @TsInterface
 public interface CoreProxyJsStreamDecoder {
 
-    /** Feeds one raw vendor chunk and returns the IR events it completed, as a JSON array. */
+    /**
+     * Feeds one raw vendor chunk.
+     *
+     * @param chunk the bytes as they arrived, at whatever boundary the transport gave them
+     * @return the IR events the chunk completed, as a JSON array
+     */
     String decode(String chunk);
 }

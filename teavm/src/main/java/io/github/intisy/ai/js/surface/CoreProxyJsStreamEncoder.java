@@ -11,6 +11,11 @@ import io.github.intisy.ai.tsemit.TsInterface;
 @TsInterface
 public interface CoreProxyJsStreamEncoder {
 
-    /** Encodes one IR stream event to the vendor's wire text. */
+    /**
+     * Encodes one IR stream event to the vendor's wire text.
+     *
+     * @param irEventJson the IR event
+     * @return the wire text to emit
+     */
     String encode(String irEventJson);
 }

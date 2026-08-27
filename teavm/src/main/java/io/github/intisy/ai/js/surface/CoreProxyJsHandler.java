@@ -15,18 +15,33 @@ import java.util.concurrent.CompletionStage;
 @TsInterface
 public interface CoreProxyJsHandler {
 
-    /** Handles one IR request, resolving the IR response's JSON. */
+    /**
+     * Handles one IR request, resolving the IR response's JSON.
+     *
+     * @param irRequestJson the canonical IR request
+     * @param ctxJson the per-request runtime the router supplies
+     * @return the IR response's JSON
+     */
     @TsOptional
     CompletionStage<String> handleIr(String irRequestJson, String ctxJson);
 
-    /** Handles one IR request as a stream of IR events. */
+    /**
+     * Handles one IR request as a stream of IR events.
+     *
+     * @param irRequestJson the canonical IR request
+     * @param ctxJson the per-request runtime the router supplies
+     * @return the stream, pulled one event at a time
+     */
     @TsOptional
     CoreProxyJsIrStream handleIrStream(String irRequestJson, String ctxJson);
 
     /**
      * Handles one request on the app-wire path.
      *
-     * @implNote A {@code {method,url,headers,body}} request in, a {@code {status,headers,body}} out.
+     * @param requestJson the request as {@code method,url,headers,body}
+     * @param ctxJson the per-request runtime the router supplies
+     * @return the response as {@code status,headers,body}
+     * @implNote A {@code method,url,headers,body} request in, a {@code status,headers,body} out.
      */
     @TsOptional
     CompletionStage<String> handle(String requestJson, String ctxJson);

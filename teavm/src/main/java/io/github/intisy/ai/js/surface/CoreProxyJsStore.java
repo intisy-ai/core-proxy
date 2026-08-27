@@ -13,19 +13,43 @@ import io.github.intisy.ai.tsemit.TsNullable;
 @TsInterface
 public interface CoreProxyJsStore {
 
-    /** The stored value, or null when the key is absent or unreadable. */
+    /**
+     * Reads one key.
+     *
+     * @param key the key to read
+     * @return the stored value, or null when the key is absent or unreadable
+     */
     @TsNullable(asNull = true)
     String get(String key);
 
-    /** Stores a value, silently doing nothing when the write is impossible. */
+    /**
+     * Stores a value, silently doing nothing when the write is impossible.
+     *
+     * @param key the key to write
+     * @param value what to store under it
+     */
     void put(String key, String value);
 
-    /** Whether the key is present. */
+    /**
+     * Tests for a key.
+     *
+     * @param key the key to test
+     * @return whether it is present
+     */
     boolean exists(String key);
 
-    /** Removes the key, silently doing nothing when it is absent. */
+    /**
+     * Removes the key, silently doing nothing when it is absent.
+     *
+     * @param key the key to remove
+     */
     void delete(String key);
 
-    /** Every key under the prefix. */
+    /**
+     * Lists a subtree.
+     *
+     * @param prefix the prefix to list under
+     * @return every key under it
+     */
     String[] listKeys(String prefix);
 }

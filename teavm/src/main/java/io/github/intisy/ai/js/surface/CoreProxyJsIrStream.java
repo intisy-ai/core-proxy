@@ -13,7 +13,11 @@ import java.util.concurrent.CompletionStage;
 @TsInterface
 public interface CoreProxyJsIrStream {
 
-    /** The next IR event's JSON, or null once the stream has ended. */
+    /**
+     * Pulls the next event.
+     *
+     * @return the next IR event's JSON, or null once the stream has ended
+     */
     @TsUnion({"string", "null"})
     CompletionStage<String> next();
 }
